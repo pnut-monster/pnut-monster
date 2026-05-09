@@ -13,6 +13,14 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    rules: {
+      // Allow setState in effects - common pattern for data fetching
+      "react-hooks/set-state-in-effect": "warn",
+      // Allow <img> tags for dynamic URLs from Supabase storage
+      "@next/next/no-img-element": "warn",
+    },
+  },
 ]);
 
 export default eslintConfig;
