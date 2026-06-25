@@ -3,10 +3,10 @@
 import { useState } from "react";
 
 /**
- * Generate a 4-digit delivery code from an order number string.
+ * Generate a 4-digit pickup code from an order number string.
  * Uses a simple hash reduced to 4 digits (0000-9999).
  */
-export function generateDeliveryCode(orderNumber: string): string {
+export function generatePickupCode(orderNumber: string): string {
   let hash = 0;
   for (let i = 0; i < orderNumber.length; i++) {
     const char = orderNumber.charCodeAt(i);
@@ -17,7 +17,7 @@ export function generateDeliveryCode(orderNumber: string): string {
 }
 
 /**
- * Generate an 8x8 grid pattern from the delivery code.
+ * Generate an 8x8 grid pattern from the pickup code.
  * Each cell is true (filled) or false (empty) based on code-derived bits.
  */
 function generatePattern(code: string): boolean[][] {
@@ -56,13 +56,13 @@ function generatePattern(code: string): boolean[][] {
 
 // ─── Display Component ───────────────────────────────────────────────
 
-interface DeliveryCodeProps {
+interface PickupCodeProps {
   orderNumber: string;
   size?: "sm" | "md" | "lg";
 }
 
-export function DeliveryCode({ orderNumber, size = "md" }: DeliveryCodeProps) {
-  const code = generateDeliveryCode(orderNumber);
+export function PickupCode({ orderNumber, size = "md" }: PickupCodeProps) {
+  const code = generatePickupCode(orderNumber);
   const pattern = generatePattern(code);
 
   const cellSize = size === "sm" ? "w-2 h-2" : size === "lg" ? "w-4 h-4" : "w-3 h-3";
@@ -74,7 +74,7 @@ export function DeliveryCode({ orderNumber, size = "md" }: DeliveryCodeProps) {
       {/* Large code display */}
       <div className="text-center">
         <p className="text-xs font-semibold text-brand-gray-500 uppercase tracking-wider mb-1">
-          Delivery Code
+          Pickup Code
         </p>
         <p
           className={`${codeTextSize} font-heading font-bold text-brand-black tracking-[0.3em]`}
@@ -104,20 +104,20 @@ export function DeliveryCode({ orderNumber, size = "md" }: DeliveryCodeProps) {
 
 // ─── Verifier Component ──────────────────────────────────────────────
 
-interface DeliveryCodeVerifierProps {
+interface PickupCodeVerifierProps {
   orderNumber: string;
   onVerified: () => void;
   onCancel?: () => void;
 }
 
-export function DeliveryCodeVerifier({
+export function PickupCodeVerifier({
   orderNumber,
   onVerified,
   onCancel,
-}: DeliveryCodeVerifierProps) {
+}: PickupCodeVerifierProps) {
   const [input, setInput] = useState("");
   const [error, setError] = useState(false);
-  const expectedCode = generateDeliveryCode(orderNumber);
+  const expectedCode = generatePickupCode(orderNumber);
 
   function handleVerify() {
     if (input === expectedCode) {
@@ -138,7 +138,7 @@ export function DeliveryCodeVerifier({
   return (
     <div className="flex flex-col items-center gap-4 p-4">
       <p className="text-sm font-semibold text-brand-gray-700">
-        Enter the customer&apos;s 4-digit delivery code
+        Enter the customer&apos;s 4-digit pickup code
       </p>
 
       <input
@@ -196,3 +196,11 @@ export function DeliveryCodeVerifier({
     </div>
   );
 }
+
+// ─── Backwards Compatibility Exports ─────────────────────────────────
+// Keep old names for existing imports
+export const generateDeliveryCode = generatePickupCode;
+export const DeliveryCode = PickupCode;
+export const DeliveryCodeVerifier = PickupCodeVerifier;
+export type DeliveryCodeProps = PickupCodeProps;
+export type DeliveryCodeVerifierProps = PickupCodeVerifierProps;

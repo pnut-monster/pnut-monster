@@ -118,8 +118,8 @@ export default function MenuPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-brand-cream">
-        <div className="sticky top-0 z-10 bg-white px-4 py-3 shadow-sm">
+      <div className="min-h-screen bg-[#FAFBFC]">
+        <div className="sticky top-0 z-10 bg-white px-4 py-3 shadow-sm border-b border-brand-gray-200">
           <div className="h-6 w-32 animate-pulse rounded bg-brand-gray-200" />
           <div className="mt-3 flex gap-2">
             {[1, 2, 3, 4].map((i) => (
@@ -137,18 +137,18 @@ export default function MenuPage() {
   }
 
   return (
-    <div className="min-h-screen bg-brand-cream pb-24">
+    <div className="min-h-screen bg-[#FAFBFC] pb-24">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-white shadow-sm">
+      <div className="sticky top-0 z-10 bg-white shadow-sm border-b border-brand-gray-200">
         <div className="flex items-center gap-3 px-4 py-3">
-          <button onClick={() => router.push("/outlets")} className="text-brand-gray-500">
+          <button onClick={() => router.push("/outlets")} className="text-brand-gray-500 hover:text-brand-black transition-colors">
             <ChevronLeft className="h-5 w-5" />
           </button>
           <div className="flex-1">
+            <p className="text-[10px] font-bold text-brand-gray-500 uppercase tracking-wider">MENU</p>
             <h1 className="font-[family-name:var(--font-heading)] text-lg font-bold text-brand-black">
-              Menu
+              {selectedOutlet?.name}
             </h1>
-            <p className="text-xs text-brand-gray-500">{selectedOutlet?.name}</p>
           </div>
         </div>
 
@@ -211,7 +211,7 @@ export default function MenuPage() {
         <div className="fixed bottom-20 left-4 right-4 z-20">
           <button
             onClick={() => router.push("/cart")}
-            className="flex w-full items-center justify-between rounded-2xl bg-brand-black px-5 py-3.5 text-white shadow-lg transition-transform active:scale-[0.98]"
+            className="flex w-full items-center justify-between rounded-2xl bg-brand-black px-5 py-3.5 text-white shadow-2xl hover:shadow-3xl transition-all active:scale-[0.98]"
           >
             <div className="flex items-center gap-2">
               <ShoppingBag className="h-5 w-5" />
@@ -233,10 +233,10 @@ function MenuItemCard({ item }: { item: MenuItem }) {
   return (
     <button
       onClick={() => router.push(`/menu/${item.slug}`)}
-      className="flex w-full items-start gap-3 rounded-2xl bg-white p-3 text-left shadow-sm transition-all active:scale-[0.98]"
+      className="flex w-full items-start gap-3 rounded-2xl bg-white p-3 text-left border border-brand-gray-200 hover:border-brand-yellow hover:shadow-lg transition-all active:scale-[0.98]"
     >
       {/* Image placeholder */}
-      <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-xl bg-brand-gray-100">
+      <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-xl bg-white">
         {item.image_url ? (
           <img src={getImageUrl(item.image_url) ?? ""} alt={item.name} className="h-full w-full object-cover" />
         ) : (
@@ -244,11 +244,14 @@ function MenuItemCard({ item }: { item: MenuItem }) {
             <Leaf className="h-8 w-8 text-brand-green/30" />
           </div>
         )}
-        {item.is_veg && (
-          <span className="absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded-sm border border-brand-green bg-white">
-            <span className="h-2 w-2 rounded-full bg-brand-green" />
-          </span>
-        )}
+        {/* Veg/Non-veg indicator */}
+        <div className={`absolute top-1 right-1 w-4 h-4 rounded-sm border-2 flex items-center justify-center ${
+          item.is_veg ? "border-green-600 bg-white" : "border-red-600 bg-white"
+        }`}>
+          <div className={`w-2 h-2 rounded-full ${
+            item.is_veg ? "bg-green-600" : "bg-red-600"
+          }`} />
+        </div>
       </div>
 
       <div className="flex-1 overflow-hidden">
@@ -267,11 +270,11 @@ function MenuItemCard({ item }: { item: MenuItem }) {
           <p className="mt-0.5 line-clamp-2 text-xs text-brand-gray-500">{item.description}</p>
         )}
         <div className="mt-2 flex items-center justify-between">
-          <span className="font-[family-name:var(--font-heading)] text-sm font-bold text-brand-black">
+          <span className="font-[family-name:var(--font-heading)] text-base font-bold text-brand-black">
             {formatCurrency(item.base_price)}
           </span>
-          <span className="flex items-center gap-1 rounded-lg bg-brand-yellow/10 px-2.5 py-1 text-xs font-bold text-brand-yellow-dark">
-            <Plus className="h-3 w-3" /> ADD
+          <span className="flex items-center gap-1 rounded-xl bg-brand-yellow hover:bg-brand-yellow-dark px-3 py-1.5 text-xs font-bold text-brand-black transition-colors shadow-sm">
+            <Plus className="h-3.5 w-3.5" /> ADD
           </span>
         </div>
       </div>

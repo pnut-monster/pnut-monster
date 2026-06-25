@@ -310,7 +310,7 @@ export default function ItemDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#FFF8E7] flex items-center justify-center">
+      <div className="min-h-screen bg-[#FAFBFC] flex items-center justify-center">
         <div className="w-10 h-10 border-4 border-[#F5B731] border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -318,7 +318,7 @@ export default function ItemDetailPage() {
 
   if (error || !item) {
     return (
-      <div className="min-h-screen bg-[#FFF8E7] flex flex-col items-center justify-center gap-4 px-6">
+      <div className="min-h-screen bg-[#FAFBFC] flex flex-col items-center justify-center gap-4 px-6">
         <p className="font-[family-name:var(--font-body)] text-[#1A1A1A] text-lg">
           {error ?? "Item not found"}
         </p>
@@ -333,26 +333,29 @@ export default function ItemDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FFF8E7] pb-32">
+    <div className="min-h-screen bg-[#FAFBFC] pb-32">
       {/* Header */}
-      <div className="sticky top-0 z-20 bg-[#FFF8E7]/95 backdrop-blur-sm border-b border-[#F5B731]/20">
+      <div className="sticky top-0 z-20 bg-white border-b border-brand-gray-200 shadow-sm">
         <div className="flex items-center gap-3 px-4 py-3">
           <button
             onClick={() => router.back()}
-            className="w-10 h-10 flex items-center justify-center rounded-full bg-white shadow-sm"
+            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-brand-gray-100 transition-colors"
           >
-            <ChevronLeft className="w-5 h-5 text-[#1A1A1A]" />
+            <ChevronLeft className="w-5 h-5 text-brand-black" />
           </button>
-          <h1 className="font-[family-name:var(--font-heading)] text-[#1A1A1A] font-semibold text-lg truncate">
-            {item.name}
-          </h1>
+          <div>
+            <p className="text-[10px] font-bold text-brand-gray-500 uppercase tracking-wider">ITEM DETAILS</p>
+            <h1 className="font-[family-name:var(--font-heading)] text-brand-black font-bold text-base truncate">
+              {item.name}
+            </h1>
+          </div>
         </div>
       </div>
 
       {/* Item Hero */}
       <div className="px-4 pt-4 pb-2">
         {/* Image */}
-        <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-white shadow-sm">
+        <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-white border border-brand-gray-200">
           {item.image_url ? (
             <img
               src={getImageUrl(item.image_url) ?? ""}

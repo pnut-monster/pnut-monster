@@ -230,10 +230,10 @@ export default function ProfilePage() {
       comingSoon: true,
     },
     {
-      label: "Referral Code",
-      description: profile?.referral_code ?? "Not available",
+      label: "Referral Program",
+      description: "Invite friends & earn rewards",
       icon: Gift,
-      action: handleCopyReferral,
+      href: "/referral",
       color: "text-green-500",
     },
     {
@@ -251,51 +251,56 @@ export default function ProfilePage() {
   ];
 
   return (
-    <div className="px-4 py-6 space-y-5 max-w-lg mx-auto">
-      {/* Page Title */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => router.back()}
-          className="p-1.5 rounded-lg hover:bg-brand-gray-100 transition-colors"
-          aria-label="Go back"
-        >
-          <ChevronLeft className="w-5 h-5 text-brand-gray-600" />
-        </button>
-        <h1 className="font-heading text-xl font-bold text-brand-black">
-          Profile
-        </h1>
+    <div className="min-h-screen bg-[#FAFBFC]">
+      {/* Header */}
+      <div className="sticky top-0 z-10 bg-white border-b border-brand-gray-200 px-4 py-3 shadow-sm">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.back()}
+            className="p-1 -ml-1 rounded-lg hover:bg-brand-gray-100 transition-colors"
+          >
+            <ChevronLeft className="w-6 h-6 text-brand-black" />
+          </button>
+          <div>
+            <p className="text-[10px] font-bold text-brand-gray-500 uppercase tracking-wider">PROFILE</p>
+            <h1 className="text-lg font-bold font-[family-name:var(--font-heading)] text-brand-black">
+              My Profile
+            </h1>
+          </div>
+        </div>
       </div>
 
-      {/* Profile Header */}
-      {!editing ? (
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-brand-gray-100">
-          <div className="flex items-center gap-4">
-            <Avatar
-              src={profile?.avatar_url}
-              name={profile?.full_name ?? undefined}
-              size="lg"
-            />
-            <div className="flex-1 min-w-0">
-              <p className="font-heading text-lg font-bold text-brand-black truncate">
-                {profile?.full_name || "PNUT Lover"}
-              </p>
-              {profile?.phone && (
-                <p className="text-sm text-brand-gray-500">{profile.phone}</p>
-              )}
-              {profile?.email && (
-                <p className="text-xs text-brand-gray-400 truncate">
-                  {profile.email}
+      <div className="px-4 py-6 space-y-5 max-w-lg mx-auto">
+        {/* Profile Header */}
+        {!editing ? (
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-brand-gray-200">
+            <div className="flex items-center gap-4">
+              <Avatar
+                src={profile?.avatar_url}
+                name={profile?.full_name ?? undefined}
+                size="lg"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="font-heading text-lg font-bold text-brand-black truncate">
+                  {profile?.full_name || "PNUT Lover"}
                 </p>
-              )}
-              <div className="mt-1.5">
-                <Badge variant={tierInfo.variant}>{tierInfo.label}</Badge>
+                {profile?.phone && (
+                  <p className="text-sm text-brand-gray-500">{profile.phone}</p>
+                )}
+                {profile?.email && (
+                  <p className="text-xs text-brand-gray-400 truncate">
+                    {profile.email}
+                  </p>
+                )}
+                <div className="mt-1.5">
+                  <Badge variant={tierInfo.variant}>{tierInfo.label}</Badge>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      ) : (
+        ) : (
         /* Edit Profile Form */
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-brand-gray-100 space-y-4">
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-brand-gray-200 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-heading text-base font-bold text-brand-black">
               Edit Profile
@@ -367,7 +372,7 @@ export default function ProfilePage() {
       <div className="grid grid-cols-3 gap-3">
         <Link
           href="/orders"
-          className="bg-white rounded-xl p-3 shadow-sm border border-brand-gray-100 text-center hover:shadow-md transition-shadow"
+          className="bg-white rounded-xl p-3 shadow-sm border border-brand-gray-200 text-center hover:shadow-md transition-shadow"
         >
           <ShoppingBag className="w-5 h-5 text-brand-yellow-dark mx-auto" />
           <p className="font-heading text-lg font-bold text-brand-black mt-1">
@@ -377,7 +382,7 @@ export default function ProfilePage() {
         </Link>
         <Link
           href="/wallet"
-          className="bg-white rounded-xl p-3 shadow-sm border border-brand-gray-100 text-center hover:shadow-md transition-shadow"
+          className="bg-white rounded-xl p-3 shadow-sm border border-brand-gray-200 text-center hover:shadow-md transition-shadow"
         >
           <Wallet className="w-5 h-5 text-green-500 mx-auto" />
           <p className="font-heading text-lg font-bold text-brand-black mt-1">
@@ -387,7 +392,7 @@ export default function ProfilePage() {
         </Link>
         <Link
           href="/loyalty"
-          className="bg-white rounded-xl p-3 shadow-sm border border-brand-gray-100 text-center hover:shadow-md transition-shadow"
+          className="bg-white rounded-xl p-3 shadow-sm border border-brand-gray-200 text-center hover:shadow-md transition-shadow"
         >
           <Star className="w-5 h-5 text-purple-500 mx-auto" />
           <p className="font-heading text-lg font-bold text-brand-black mt-1">
@@ -398,7 +403,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Menu Items */}
-      <div className="bg-white rounded-2xl shadow-sm border border-brand-gray-100 divide-y divide-brand-gray-100 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-sm border border-brand-gray-200 divide-y divide-brand-gray-100 overflow-hidden">
         {menuItems.map((item) => {
           const Icon = item.icon;
           const content = (
@@ -466,24 +471,25 @@ export default function ProfilePage() {
         })}
       </div>
 
-      {/* Sign Out */}
-      <button
-        onClick={handleSignOut}
-        disabled={signingOut}
-        className="w-full flex items-center justify-center gap-2 bg-red-50 text-red-600 font-bold py-3.5 rounded-xl text-sm hover:bg-red-100 transition-colors border border-red-100 disabled:opacity-50"
-      >
-        {signingOut ? (
-          <Loader2 className="w-5 h-5 animate-spin" />
-        ) : (
-          <>
-            <LogOut className="w-4 h-4" />
-            Sign Out
-          </>
-        )}
-      </button>
+        {/* Sign Out */}
+        <button
+          onClick={handleSignOut}
+          disabled={signingOut}
+          className="w-full flex items-center justify-center gap-2 bg-red-50 text-red-600 font-bold py-3.5 rounded-xl text-sm hover:bg-red-100 transition-colors border border-red-100 disabled:opacity-50"
+        >
+          {signingOut ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : (
+            <>
+              <LogOut className="w-4 h-4" />
+              Sign Out
+            </>
+          )}
+        </button>
 
-      {/* Bottom spacer for safe area */}
-      <div className="h-4" />
+        {/* Bottom spacer for safe area */}
+        <div className="h-4" />
+      </div>
     </div>
   );
 }

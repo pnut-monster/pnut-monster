@@ -82,19 +82,29 @@ export default function ProfileSetupPage() {
         }
       }
 
-      const { error } = await supabase.from("profiles").upsert({
-        id: user.id,
-        full_name: fullName.trim(),
-        email: authEmail || null,
-        phone: cleanedPhone ? `+91${cleanedPhone}` : null,
-        date_of_birth: dob || null,
-        avatar_url: avatarUrl,
-        updated_at: new Date().toISOString(),
-      } as never);
+      // First check if profile exists
+      const { data: existingProfile, error: fetchError } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", user.id)
+        .single();
+
+      console.log("Existing profile check:", { existingProfile, fetchError, userId: user.id });
+
+      const { error } = await supabase.from("profiles")
+        .update({
+          full_name: fullName.trim(),
+          email: authEmail || null,
+          phone: cleanedPhone ? `+91${cleanedPhone}` : null,
+          date_of_birth: dob || null,
+          avatar_url: avatarUrl,
+        })
+        .eq('id', user.id);
 
       if (error) {
         console.error("Profile save error:", error);
-        toast.error("Failed to save profile. Please try again.");
+        console.error("Error details:", JSON.stringify(error, null, 2));
+        toast.error(`Failed to save profile: ${error.message}`);
         return;
       }
 
@@ -109,7 +119,7 @@ export default function ProfileSetupPage() {
   };
 
   return (
-    <div className="min-h-dvh bg-brand-cream">
+    <div className="min-h-dvh bg-[#FAFBFC]">
       <div className="max-w-lg mx-auto px-6 py-8">
         {/* Header */}
         <div className="text-center mb-8">

@@ -204,73 +204,81 @@ export default function WalletPage() {
     (wallet?.loaded_balance ?? 0) + (wallet?.bonus_balance ?? 0);
 
   return (
-    <div className="px-4 py-6 space-y-5 max-w-lg mx-auto">
-      {/* Page Title */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => router.back()}
-          className="p-1.5 rounded-lg hover:bg-brand-gray-100 transition-colors"
-          aria-label="Go back"
-        >
-          <ChevronLeft className="w-5 h-5 text-brand-gray-600" />
-        </button>
-        <h1 className="font-heading text-xl font-bold text-brand-black">
-          My Wallet
-        </h1>
-      </div>
-
-      {/* Balance Card */}
-      <div className="bg-gradient-to-br from-brand-yellow via-brand-yellow to-brand-yellow-dark rounded-2xl p-6 shadow-lg relative overflow-hidden">
-        {/* Decorative */}
-        <div className="absolute -right-8 -top-8 w-32 h-32 bg-white/10 rounded-full" />
-        <div className="absolute -right-4 bottom-0 w-20 h-20 bg-white/5 rounded-full" />
-
-        <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-1">
-            <Wallet className="w-5 h-5 text-brand-black/60" />
-            <p className="text-sm font-semibold text-brand-black/60">
-              Total Balance
-            </p>
-          </div>
-          <p className="font-heading text-4xl font-bold text-brand-black">
-            {formatCurrency(totalBalance)}
-          </p>
-
-          <div className="flex gap-6 mt-4">
-            <div>
-              <p className="text-xs text-brand-black/50 font-medium">Loaded</p>
-              <p className="text-sm font-bold text-brand-black">
-                {formatCurrency(wallet?.loaded_balance ?? 0)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-brand-black/50 font-medium">Bonus</p>
-              <p className="text-sm font-bold text-brand-black">
-                {formatCurrency(wallet?.bonus_balance ?? 0)}
-              </p>
-            </div>
+    <div className="min-h-screen bg-[#FAFBFC]">
+      {/* Header */}
+      <div className="sticky top-0 z-10 bg-white border-b border-brand-gray-200 px-4 py-3 shadow-sm">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.back()}
+            className="p-1 -ml-1 rounded-lg hover:bg-brand-gray-100 transition-colors"
+          >
+            <ChevronLeft className="w-6 h-6 text-brand-black" />
+          </button>
+          <div>
+            <p className="text-[10px] font-bold text-brand-gray-500 uppercase tracking-wider">WALLET</p>
+            <h1 className="text-lg font-bold font-[family-name:var(--font-heading)] text-brand-black">
+              My Wallet
+            </h1>
           </div>
         </div>
       </div>
 
-      {/* Add Money Button */}
-      {!showAddMoney && (
-        <button
-          onClick={() => setShowAddMoney(true)}
-          className="w-full flex items-center justify-center gap-2 bg-brand-black text-white font-bold py-3.5 rounded-xl text-sm hover:bg-brand-gray-800 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add Money
-        </button>
-      )}
+      <div className="px-4 py-6 space-y-5 max-w-lg mx-auto">
+        {/* Balance Card */}
+        <div className="bg-gradient-to-br from-brand-green via-brand-green to-brand-green-dark rounded-2xl p-6 shadow-xl relative overflow-hidden border border-brand-green-dark/20">
+          {/* Decorative */}
+          <div className="absolute -right-8 -top-8 w-32 h-32 bg-white/10 rounded-full" />
+          <div className="absolute -right-4 bottom-0 w-20 h-20 bg-white/5 rounded-full" />
 
-      {/* Add Money Section */}
-      {showAddMoney && (
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-brand-gray-100 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-heading text-base font-bold text-brand-black">
-              Add Money
-            </h3>
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 mb-1">
+              <Wallet className="w-5 h-5 text-white/80" />
+              <p className="text-xs font-bold text-white/80 uppercase tracking-wider">
+                TOTAL BALANCE
+              </p>
+            </div>
+            <p className="font-heading text-4xl font-bold text-white">
+              {formatCurrency(totalBalance)}
+            </p>
+
+            <div className="flex gap-6 mt-4">
+              <div>
+                <p className="text-[10px] text-white/70 font-bold uppercase tracking-wider">LOADED</p>
+                <p className="text-base font-bold text-white">
+                  {formatCurrency(wallet?.loaded_balance ?? 0)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] text-white/70 font-bold uppercase tracking-wider">BONUS</p>
+                <p className="text-base font-bold text-white">
+                  {formatCurrency(wallet?.bonus_balance ?? 0)}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Add Money Button */}
+        {!showAddMoney && (
+          <button
+            onClick={() => setShowAddMoney(true)}
+            className="w-full flex items-center justify-center gap-2 bg-brand-yellow text-brand-black font-bold py-3.5 rounded-xl text-sm hover:bg-brand-yellow-dark hover:shadow-lg transition-all shadow-md"
+          >
+            <Plus className="w-4 h-4" />
+            Add Money
+          </button>
+        )}
+
+        {/* Add Money Section */}
+        {showAddMoney && (
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-brand-gray-200 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-bold text-brand-gray-500 uppercase tracking-wider">ADD MONEY</p>
+                <h3 className="font-heading text-base font-bold text-brand-black">
+                  Choose Amount
+                </h3>
+              </div>
             <button
               onClick={() => {
                 setShowAddMoney(false);
@@ -344,7 +352,7 @@ export default function WalletPage() {
           <button
             onClick={handleTopUp}
             disabled={activeAmount < 1 || topUpLoading}
-            className="w-full flex items-center justify-center gap-2 bg-brand-yellow text-brand-black font-bold py-3.5 rounded-xl text-sm hover:bg-brand-yellow-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-2 bg-brand-yellow text-brand-black font-bold py-3.5 rounded-xl text-sm hover:bg-brand-yellow-dark hover:shadow-lg transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {topUpLoading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -359,53 +367,57 @@ export default function WalletPage() {
         </div>
       )}
 
-      {/* Transaction History */}
-      <div>
-        <h3 className="font-heading text-base font-bold text-brand-black mb-3">
-          Transaction History
-        </h3>
+        {/* Transaction History */}
+        <div>
+          <div className="mb-3">
+            <p className="text-[10px] font-bold text-brand-gray-500 uppercase tracking-wider">TRANSACTION HISTORY</p>
+            <h3 className="font-heading text-lg font-bold text-brand-black">
+              Recent Activity
+            </h3>
+          </div>
 
-        {transactions.length === 0 ? (
-          <EmptyState
-            icon={<Wallet className="w-12 h-12" />}
-            title="No transactions yet"
-            description="Your wallet transactions will appear here after you add money or make a purchase."
-          />
-        ) : (
-          <div className="space-y-2">
-            {transactions.map((tx) => {
-              const isCredit =
-                tx.type === "topup" ||
-                tx.type === "bonus" ||
-                tx.type === "refund";
-              return (
-                <div
-                  key={tx.id}
-                  className="bg-white rounded-xl p-4 flex items-center gap-3 shadow-sm border border-brand-gray-100"
-                >
-                  <TransactionIcon type={tx.type} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-brand-black truncate">
-                      {tx.description}
-                    </p>
-                    <p className="text-xs text-brand-gray-400 mt-0.5">
-                      {formatDateTime(tx.created_at)}
+          {transactions.length === 0 ? (
+            <EmptyState
+              icon={<Wallet className="w-12 h-12" />}
+              title="No transactions yet"
+              description="Your wallet transactions will appear here after you add money or make a purchase."
+            />
+          ) : (
+            <div className="space-y-2">
+              {transactions.map((tx) => {
+                const isCredit =
+                  tx.type === "topup" ||
+                  tx.type === "bonus" ||
+                  tx.type === "refund";
+                return (
+                  <div
+                    key={tx.id}
+                    className="bg-white rounded-xl p-4 flex items-center gap-3 shadow-sm border border-brand-gray-100"
+                  >
+                    <TransactionIcon type={tx.type} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-brand-black truncate">
+                        {tx.description}
+                      </p>
+                      <p className="text-xs text-brand-gray-400 mt-0.5">
+                        {formatDateTime(tx.created_at)}
+                      </p>
+                    </div>
+                    <p
+                      className={cn(
+                        "text-sm font-bold shrink-0",
+                        isCredit ? "text-green-600" : "text-red-500"
+                      )}
+                    >
+                      {isCredit ? "+" : "-"}
+                      {formatCurrency(tx.amount)}
                     </p>
                   </div>
-                  <p
-                    className={cn(
-                      "text-sm font-bold shrink-0",
-                      isCredit ? "text-green-600" : "text-red-500"
-                    )}
-                  >
-                    {isCredit ? "+" : "-"}
-                    {formatCurrency(tx.amount)}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

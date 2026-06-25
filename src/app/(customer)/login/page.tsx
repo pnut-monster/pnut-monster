@@ -114,7 +114,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-dvh bg-brand-cream flex flex-col">
+    <div className="min-h-dvh bg-[#FAFBFC] flex flex-col">
       {/* Brand */}
       <div className="flex-shrink-0 pt-12 pb-6 px-6 text-center">
         <img src="/logo.webp" alt="PNUT MONSTER" className="w-28 h-28 mx-auto mb-2 object-contain" />
@@ -122,9 +122,12 @@ export default function LoginPage() {
       </div>
 
       {/* Form */}
-      <div className="flex-1 bg-white rounded-t-3xl px-6 pt-8 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
-        <h2 className="font-heading text-xl font-bold text-brand-black mb-1">Welcome back</h2>
-        <p className="text-brand-gray-500 text-sm mb-6">Sign in to your account</p>
+      <div className="flex-1 bg-white rounded-t-3xl px-6 pt-8 pb-6 shadow-lg">
+        <div className="mb-1">
+          <p className="text-[10px] font-bold text-brand-gray-500 uppercase tracking-wider">SIGN IN</p>
+        </div>
+        <h2 className="font-heading text-2xl font-bold text-brand-black mb-1">Welcome back</h2>
+        <p className="text-brand-gray-600 text-sm mb-6">Sign in to your account</p>
 
         {/* Toggle: Password / Email OTP */}
         <div className="flex bg-brand-gray-100 rounded-xl p-1 mb-6">
@@ -150,10 +153,10 @@ export default function LoginPage() {
 
         {/* Shared email field */}
         <div className="mb-4">
-          <label htmlFor="email" className="block text-sm font-semibold text-brand-gray-700 mb-1.5">
+          <label htmlFor="email" className="block text-xs font-bold text-brand-gray-500 uppercase tracking-wider mb-2">
             Email Address
           </label>
-          <div className="flex items-center border-2 border-brand-gray-200 rounded-xl focus-within:border-brand-yellow transition-colors" suppressHydrationWarning>
+          <div className="flex items-center border border-brand-gray-200 rounded-xl focus-within:border-brand-yellow transition-colors bg-white" suppressHydrationWarning>
             <div className="flex items-center pl-3 pr-2">
               <Mail className="w-4 h-4 text-brand-gray-400" />
             </div>
@@ -174,11 +177,11 @@ export default function LoginPage() {
         {method === "password" && (
           <form onSubmit={handlePasswordSignIn} className="space-y-4" suppressHydrationWarning>
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label htmlFor="password" className="block text-sm font-semibold text-brand-gray-700">Password</label>
+              <div className="flex items-center justify-between mb-2">
+                <label htmlFor="password" className="block text-xs font-bold text-brand-gray-500 uppercase tracking-wider">Password</label>
                 <Link href="/forgot-password" className="text-xs font-semibold text-brand-yellow-dark hover:underline">Forgot Password?</Link>
               </div>
-              <div className="flex items-center border-2 border-brand-gray-200 rounded-xl focus-within:border-brand-yellow transition-colors" suppressHydrationWarning>
+              <div className="flex items-center border border-brand-gray-200 rounded-xl focus-within:border-brand-yellow transition-colors bg-white" suppressHydrationWarning>
                 <div className="flex items-center pl-3 pr-2">
                   <Lock className="w-4 h-4 text-brand-gray-400" />
                 </div>
@@ -199,7 +202,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading || !email.trim() || !password}
-              className="w-full flex items-center justify-center gap-2 bg-brand-yellow text-brand-black font-bold py-3.5 rounded-xl text-sm hover:bg-brand-yellow-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 bg-brand-yellow text-brand-black font-bold py-3.5 rounded-xl text-sm hover:bg-brand-yellow-dark hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
             >
               {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Sign In <ArrowRight className="w-4 h-4" /></>}
             </button>
@@ -213,7 +216,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading || !email.trim()}
-              className="w-full flex items-center justify-center gap-2 bg-brand-yellow text-brand-black font-bold py-3.5 rounded-xl text-sm hover:bg-brand-yellow-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 bg-brand-yellow text-brand-black font-bold py-3.5 rounded-xl text-sm hover:bg-brand-yellow-dark hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
             >
               {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Send OTP <ArrowRight className="w-4 h-4" /></>}
             </button>
@@ -227,8 +230,8 @@ export default function LoginPage() {
               <p className="text-xs text-brand-green-dark font-semibold">OTP sent to {email}</p>
             </div>
             <div>
-              <label htmlFor="otp" className="block text-sm font-semibold text-brand-gray-700 mb-1.5">Enter OTP</label>
-              <div className="flex items-center border-2 border-brand-gray-200 rounded-xl focus-within:border-brand-yellow transition-colors" suppressHydrationWarning>
+              <label htmlFor="otp" className="block text-xs font-bold text-brand-gray-500 uppercase tracking-wider mb-2">Enter OTP</label>
+              <div className="flex items-center border border-brand-gray-200 rounded-xl focus-within:border-brand-yellow transition-colors bg-white" suppressHydrationWarning>
                 <div className="flex items-center pl-3 pr-2">
                   <KeyRound className="w-4 h-4 text-brand-gray-400" />
                 </div>
@@ -248,7 +251,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading || !otp.trim()}
-              className="w-full flex items-center justify-center gap-2 bg-brand-yellow text-brand-black font-bold py-3.5 rounded-xl text-sm hover:bg-brand-yellow-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 bg-brand-yellow text-brand-black font-bold py-3.5 rounded-xl text-sm hover:bg-brand-yellow-dark hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
             >
               {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Verify & Sign In <ArrowRight className="w-4 h-4" /></>}
             </button>
@@ -273,7 +276,7 @@ export default function LoginPage() {
         <button
           type="button"
           onClick={handleGoogleSignIn}
-          className="w-full flex items-center justify-center gap-3 border-2 border-brand-gray-200 py-3 rounded-xl text-sm font-semibold text-brand-gray-700 hover:bg-brand-gray-50 transition-colors"
+          className="w-full flex items-center justify-center gap-3 border border-brand-gray-200 py-3 rounded-xl text-sm font-semibold text-brand-gray-700 hover:bg-brand-gray-50 hover:shadow-md transition-all bg-white"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />

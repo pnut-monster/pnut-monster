@@ -156,16 +156,16 @@ export default function OrderHistoryPage() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen bg-brand-cream flex items-center justify-center">
+      <div className="min-h-screen bg-[#FAFBFC] flex items-center justify-center">
         <Spinner size="lg" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-brand-cream pb-8">
+    <div className="min-h-screen bg-[#FAFBFC] pb-8">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-white border-b border-brand-gray-200">
+      <div className="sticky top-0 z-10 bg-white border-b border-brand-gray-200 shadow-sm">
         <div className="px-4 py-3">
           <div className="flex items-center gap-3">
             <button
@@ -174,9 +174,12 @@ export default function OrderHistoryPage() {
             >
               <ChevronLeft className="h-6 w-6 text-brand-black" />
             </button>
-            <h1 className="text-xl font-bold font-[family-name:var(--font-heading)] text-brand-black">
-              My Orders
-            </h1>
+            <div>
+              <p className="text-[10px] font-bold text-brand-gray-500 uppercase tracking-wider">ORDERS</p>
+              <h1 className="text-lg font-bold font-[family-name:var(--font-heading)] text-brand-black">
+                My Orders
+              </h1>
+            </div>
           </div>
         </div>
 
@@ -229,7 +232,8 @@ export default function OrderHistoryPage() {
             >
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <p className="font-bold font-[family-name:var(--font-heading)] text-brand-black text-sm">
+                  <p className="text-[10px] font-bold text-brand-gray-500 uppercase tracking-wider">ORDER</p>
+                  <p className="font-bold font-[family-name:var(--font-heading)] text-brand-black text-base">
                     #{order.order_number}
                   </p>
                   <p className="text-xs text-brand-gray-500 mt-0.5">

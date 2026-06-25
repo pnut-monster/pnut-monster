@@ -105,7 +105,7 @@ export default function OutletsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-brand-cream">
+    <div className="min-h-screen bg-[#FAFBFC]">
       <div className="sticky top-0 z-10 bg-white px-4 pb-3 pt-4 shadow-sm">
         <h1 className="mb-3 font-[family-name:var(--font-heading)] text-xl font-bold text-brand-black">
           Select Outlet

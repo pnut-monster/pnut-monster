@@ -135,7 +135,7 @@ export default function CartPage() {
 
   if (items.length === 0) {
     return (
-      <div className="min-h-screen bg-brand-cream">
+      <div className="min-h-screen bg-[#FAFBFC]">
         {/* Header */}
         <div className="sticky top-0 z-10 bg-white border-b border-brand-gray-200 px-4 py-3">
           <div className="flex items-center gap-3">
@@ -164,9 +164,9 @@ export default function CartPage() {
   }
 
   return (
-    <div className="min-h-screen bg-brand-cream pb-28">
+    <div className="min-h-screen bg-[#FAFBFC] pb-28">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-white border-b border-brand-gray-200 px-4 py-3">
+      <div className="sticky top-0 z-10 bg-white border-b border-brand-gray-200 px-4 py-3 shadow-sm">
         <div className="flex items-center gap-3">
           <button
             onClick={() => router.back()}
@@ -174,23 +174,21 @@ export default function CartPage() {
           >
             <ChevronLeft className="h-6 w-6 text-brand-black" />
           </button>
-          <h1 className="text-xl font-bold font-[family-name:var(--font-heading)] text-brand-black">
-            Your Cart
-          </h1>
-          <span className="ml-auto text-sm text-brand-gray-500">
-            {getItemCount()} {getItemCount() === 1 ? "item" : "items"}
-          </span>
+          <div className="flex-1">
+            <p className="text-[10px] font-bold text-brand-gray-500 uppercase tracking-wider">CART</p>
+            <h1 className="text-lg font-bold font-[family-name:var(--font-heading)] text-brand-black">
+              Your Cart ({getItemCount()} {getItemCount() === 1 ? "item" : "items"})
+            </h1>
+          </div>
         </div>
       </div>
 
       <div className="px-4 py-4 space-y-4">
         {/* Outlet info */}
         {selectedOutlet && (
-          <div className="text-sm text-brand-gray-600">
-            Ordering from{" "}
-            <span className="font-semibold text-brand-black">
-              {selectedOutlet.name}
-            </span>
+          <div className="bg-white rounded-2xl p-4 border border-brand-gray-200">
+            <p className="text-[10px] font-bold text-brand-gray-500 uppercase tracking-wider mb-1">OUTLET</p>
+            <p className="text-sm font-bold text-brand-black">{selectedOutlet.name}</p>
           </div>
         )}
 

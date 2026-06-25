@@ -83,7 +83,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-dvh bg-brand-cream flex flex-col">
+    <div className="min-h-dvh bg-[#FAFBFC] flex flex-col">
       {/* Top section with brand */}
       <div className="flex-shrink-0 pt-10 pb-4 px-6 text-center">
         <img src="/logo.webp" alt="PNUT MONSTER" className="w-24 h-24 mx-auto mb-1 object-contain" />
@@ -91,11 +91,14 @@ export default function RegisterPage() {
       </div>
 
       {/* Form section */}
-      <div className="flex-1 bg-white rounded-t-3xl px-6 pt-8 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
-        <h2 className="font-heading text-xl font-bold text-brand-black mb-1">
+      <div className="flex-1 bg-white rounded-t-3xl px-6 pt-8 pb-6 shadow-lg">
+        <div className="mb-1">
+          <p className="text-[10px] font-bold text-brand-gray-500 uppercase tracking-wider">SIGN UP</p>
+        </div>
+        <h2 className="font-heading text-2xl font-bold text-brand-black mb-1">
           Create your account
         </h2>
-        <p className="text-brand-gray-500 text-sm mb-6">
+        <p className="text-brand-gray-600 text-sm mb-6">
           Join the PNUT MONSTER family
         </p>
 
@@ -104,11 +107,11 @@ export default function RegisterPage() {
           <div>
             <label
               htmlFor="fullName"
-              className="block text-sm font-semibold text-brand-gray-700 mb-1.5"
+              className="block text-xs font-bold text-brand-gray-500 uppercase tracking-wider mb-2"
             >
               Full Name
             </label>
-            <div className="flex items-center border-2 border-brand-gray-200 rounded-xl focus-within:border-brand-yellow transition-colors">
+            <div className="flex items-center border border-brand-gray-200 rounded-xl focus-within:border-brand-yellow transition-colors bg-white">
               <div className="flex items-center pl-3 pr-2">
                 <User className="w-4 h-4 text-brand-gray-400" />
               </div>
@@ -128,11 +131,11 @@ export default function RegisterPage() {
           <div>
             <label
               htmlFor="email"
-              className="block text-sm font-semibold text-brand-gray-700 mb-1.5"
+              className="block text-xs font-bold text-brand-gray-500 uppercase tracking-wider mb-2"
             >
               Email Address
             </label>
-            <div className="flex items-center border-2 border-brand-gray-200 rounded-xl focus-within:border-brand-yellow transition-colors">
+            <div className="flex items-center border border-brand-gray-200 rounded-xl focus-within:border-brand-yellow transition-colors bg-white">
               <div className="flex items-center pl-3 pr-2">
                 <Mail className="w-4 h-4 text-brand-gray-400" />
               </div>
@@ -152,11 +155,11 @@ export default function RegisterPage() {
           <div>
             <label
               htmlFor="password"
-              className="block text-sm font-semibold text-brand-gray-700 mb-1.5"
+              className="block text-xs font-bold text-brand-gray-500 uppercase tracking-wider mb-2"
             >
               Password
             </label>
-            <div className="flex items-center border-2 border-brand-gray-200 rounded-xl focus-within:border-brand-yellow transition-colors">
+            <div className="flex items-center border border-brand-gray-200 rounded-xl focus-within:border-brand-yellow transition-colors bg-white">
               <div className="flex items-center pl-3 pr-2">
                 <Lock className="w-4 h-4 text-brand-gray-400" />
               </div>
@@ -189,11 +192,11 @@ export default function RegisterPage() {
           <div>
             <label
               htmlFor="confirmPassword"
-              className="block text-sm font-semibold text-brand-gray-700 mb-1.5"
+              className="block text-xs font-bold text-brand-gray-500 uppercase tracking-wider mb-2"
             >
               Confirm Password
             </label>
-            <div className="flex items-center border-2 border-brand-gray-200 rounded-xl focus-within:border-brand-yellow transition-colors">
+            <div className="flex items-center border border-brand-gray-200 rounded-xl focus-within:border-brand-yellow transition-colors bg-white">
               <div className="flex items-center pl-3 pr-2">
                 <Lock className="w-4 h-4 text-brand-gray-400" />
               </div>
@@ -226,7 +229,7 @@ export default function RegisterPage() {
             <label htmlFor="phone" className="block text-sm font-semibold text-brand-gray-700 mb-1.5">
               Mobile Number <span className="text-brand-gray-400 font-normal">(optional)</span>
             </label>
-            <div className="flex items-center border-2 border-brand-gray-200 rounded-xl focus-within:border-brand-yellow transition-colors">
+            <div className="flex items-center border border-brand-gray-200 rounded-xl focus-within:border-brand-yellow transition-colors bg-white">
               <div className="flex items-center gap-1.5 pl-3 pr-2 border-r border-brand-gray-200">
                 <Phone className="w-4 h-4 text-brand-gray-400" />
                 <span className="text-sm font-semibold text-brand-gray-600">+91</span>
@@ -270,7 +273,7 @@ export default function RegisterPage() {
           <button
             type="submit"
             disabled={loading || !fullName.trim() || !email.trim() || !password || !confirmPassword || !agreedTnc}
-            className="w-full flex items-center justify-center gap-2 bg-brand-yellow text-brand-black font-bold py-3.5 rounded-xl text-sm hover:bg-brand-yellow-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-2 bg-brand-yellow text-brand-black font-bold py-3.5 rounded-xl text-sm hover:bg-brand-yellow-dark hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
           >
             {loading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
