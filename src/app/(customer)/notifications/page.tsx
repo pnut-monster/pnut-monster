@@ -116,7 +116,7 @@ export default function NotificationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [supabase, router]);
+  }, [supabase]);
 
   useEffect(() => {
     fetchNotifications();

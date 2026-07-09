@@ -28,11 +28,13 @@ import {
   Bell,
   Megaphone,
 } from "lucide-react";
+import toast from "react-hot-toast";
 
 type CustomerRow = Profile & {
   wallet?: Wallet | null;
   loyalty_account?: (LoyaltyAccount & { tier?: LoyaltyTier | null }) | null;
   order_count?: number;
+  lifetime_value?: number;
 };
 
 type UserForm = {
@@ -147,13 +149,13 @@ export default function AdminCustomersPage() {
         supabase.from("wallets").select("*").in("user_id", userIds),
         supabase.from("loyalty_accounts").select("*").in("user_id", userIds),
         supabase.from("loyalty_tiers").select("*"),
-        supabase.from("orders").select("user_id").in("user_id", userIds),
+        supabase.from("orders").select("user_id, total").in("user_id", userIds),
       ]);
 
       const wallets = (walletsRes.data as Wallet[] | null) ?? [];
       const loyaltyAccounts = (loyaltyRes.data as LoyaltyAccount[] | null) ?? [];
       const tiers = (tiersRes.data as LoyaltyTier[] | null) ?? [];
-      const orderRows = (ordersRes.data as { user_id: string }[] | null) ?? [];
+      const orderRows = (ordersRes.data as { user_id: string; total: number }[] | null) ?? [];
 
       const walletMap: Record<string, Wallet> = {};
       for (const w of wallets) walletMap[w.user_id] = w;
@@ -165,8 +167,10 @@ export default function AdminCustomersPage() {
       for (const t of tiers) tierMap[t.id] = t;
 
       const orderCountMap: Record<string, number> = {};
+      const lifetimeValueMap: Record<string, number> = {};
       for (const o of orderRows) {
         orderCountMap[o.user_id] = (orderCountMap[o.user_id] || 0) + 1;
+        lifetimeValueMap[o.user_id] = (lifetimeValueMap[o.user_id] || 0) + (o.total || 0);
       }
 
       const merged: CustomerRow[] = profiles.map((p) => {
@@ -176,78 +180,15 @@ export default function AdminCustomersPage() {
           wallet: walletMap[p.id] ?? null,
           loyalty_account: la ? { ...la, tier: tierMap[la.tier_id] ?? null } : null,
           order_count: orderCountMap[p.id] ?? 0,
+          lifetime_value: lifetimeValueMap[p.id] ?? 0,
         };
       });
 
       setAllUsers(merged);
-    } catch {
-      console.warn("[admin/customers] Supabase unreachable, using mock data");
-      setAllUsers([
-        {
-          id: "mock-1",
-          phone: "+919876543210",
-          email: "demo@pnutmonster.com",
-          full_name: "Rahul Demo",
-          avatar_url: null,
-          role: "customer",
-          referral_code: "PNUT1234",
-          referred_by: null,
-          date_of_birth: "1995-06-15",
-          created_at: new Date(Date.now() - 30 * 86400000).toISOString(),
-          updated_at: new Date().toISOString(),
-          wallet: { id: "w1", user_id: "mock-1", loaded_balance: 750, bonus_balance: 120, created_at: "", updated_at: "" },
-          loyalty_account: null,
-          order_count: 2,
-        },
-        {
-          id: "mock-3",
-          phone: "+919876543212",
-          email: "customer2@pnutmonster.com",
-          full_name: "Ananya Patel",
-          avatar_url: null,
-          role: "customer",
-          referral_code: "PNUT5678",
-          referred_by: null,
-          date_of_birth: "1998-03-22",
-          created_at: new Date(Date.now() - 15 * 86400000).toISOString(),
-          updated_at: new Date().toISOString(),
-          wallet: { id: "w3", user_id: "mock-3", loaded_balance: 300, bonus_balance: 50, created_at: "", updated_at: "" },
-          loyalty_account: null,
-          order_count: 5,
-        },
-        {
-          id: "mock-2",
-          phone: "+919876543211",
-          email: "admin@pnutmonster.com",
-          full_name: "Admin User",
-          avatar_url: null,
-          role: "super_admin",
-          referral_code: null,
-          referred_by: null,
-          date_of_birth: null,
-          created_at: new Date(Date.now() - 90 * 86400000).toISOString(),
-          updated_at: new Date().toISOString(),
-          wallet: null,
-          loyalty_account: null,
-          order_count: 0,
-        },
-        {
-          id: "mock-4",
-          phone: "+919876543213",
-          email: "staff@pnutmonster.com",
-          full_name: "Priya Staff",
-          avatar_url: null,
-          role: "outlet_staff",
-          referral_code: null,
-          referred_by: null,
-          date_of_birth: null,
-          created_at: new Date(Date.now() - 45 * 86400000).toISOString(),
-          updated_at: new Date().toISOString(),
-          wallet: null,
-          loyalty_account: null,
-          order_count: 0,
-        },
-      ]);
+    } catch (err) {
+      console.error("[admin/customers] Failed to load users:", err);
+      setAllUsers([]);
+      toast.error("Could not load users");
     }
     setLoading(false);
   }, [supabase]);
@@ -334,15 +275,15 @@ export default function AdminCustomersPage() {
         .update({ role: newRole } as never)
         .eq("id", roleChangeUser.id);
       if (error) throw error;
-    } catch {
-      console.warn("[admin/customers] Role change failed, updating local state");
-      setAllUsers((prev) =>
-        prev.map((c) => (c.id === roleChangeUser.id ? { ...c, role: newRole } : c))
-      );
+      toast.success("Role updated");
+      setRoleChangeUser(null);
+      await fetchUsers();
+    } catch (err) {
+      console.error("[admin/customers] Role change failed:", err);
+      toast.error("Could not update role");
+    } finally {
+      setRoleSaving(false);
     }
-    setRoleSaving(false);
-    setRoleChangeUser(null);
-    fetchUsers();
   };
 
   // Open create modal
@@ -376,42 +317,38 @@ export default function AdminCustomersPage() {
 
   // Create user
   const handleCreateUser = async () => {
-    if (!userForm.full_name) return;
-    if (createModalTab === "staff" && !userForm.email) return;
+    if (!userForm.full_name) {
+      toast.error("Enter a full name");
+      return;
+    }
+    if (!userForm.email) {
+      toast.error("Enter an email address");
+      return;
+    }
     setFormSaving(true);
     try {
-      const { error } = await supabase.from("profiles").insert({
-        id: `${userForm.role}-${Date.now()}`,
-        email: userForm.email || null,
-        full_name: userForm.full_name,
-        phone: userForm.phone || null,
-        role: userForm.role,
-      } as never);
-      if (error) throw error;
-    } catch {
-      console.warn("[admin/customers] Create user failed, adding to local state");
-      const newProfile: CustomerRow = {
-        id: `local-${Date.now()}`,
-        email: userForm.email || null,
-        full_name: userForm.full_name,
-        phone: userForm.phone || null,
-        avatar_url: null,
-        role: userForm.role,
-        referral_code: null,
-        referred_by: null,
-        date_of_birth: null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        wallet: null,
-        loyalty_account: null,
-        order_count: 0,
-      };
-      setAllUsers((prev) => [newProfile, ...prev]);
+      const response = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: userForm.email,
+          full_name: userForm.full_name,
+          phone: userForm.phone || null,
+          role: userForm.role,
+        }),
+      });
+      const result = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) throw new Error(result?.error ?? "Could not create user");
+      toast.success("User created. They can set a password with the reset-password flow.");
+      setCreateModalOpen(false);
+      setUserForm(EMPTY_USER_FORM);
+      await fetchUsers();
+    } catch (err) {
+      console.error("[admin/customers] Create user failed:", err);
+      toast.error("Could not create user");
+    } finally {
+      setFormSaving(false);
     }
-    setFormSaving(false);
-    setCreateModalOpen(false);
-    setUserForm(EMPTY_USER_FORM);
-    fetchUsers();
   };
 
   // Export
@@ -551,7 +488,7 @@ export default function AdminCustomersPage() {
 
             {/* Wallet & Loyalty details (customers) */}
             {!isStaffUser && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
                 <div className="bg-brand-gray-50 rounded-lg p-3">
                   <p className="text-xs text-brand-gray-500">Loaded Balance</p>
                   <p className="font-bold text-brand-black">
@@ -574,6 +511,12 @@ export default function AdminCustomersPage() {
                   <p className="text-xs text-brand-gray-500">Lifetime Points</p>
                   <p className="font-bold text-brand-black">
                     {user.loyalty_account?.lifetime_points?.toLocaleString() ?? 0}
+                  </p>
+                </div>
+                <div className="bg-brand-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-brand-gray-500">Lifetime Value</p>
+                  <p className="font-bold text-brand-black">
+                    {formatCurrency(user.lifetime_value ?? 0)}
                   </p>
                 </div>
               </div>
@@ -848,7 +791,7 @@ export default function AdminCustomersPage() {
               placeholder={createModalTab === "customer" ? "e.g. Rahul Mehta" : "e.g. Priya Sharma"}
             />
             <Input
-              label={createModalTab === "customer" ? "Email (optional)" : "Email"}
+              label="Email"
               type="email"
               value={userForm.email}
               onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
@@ -967,8 +910,8 @@ export default function AdminCustomersPage() {
               createModalTab === "customer" ? "text-green-700" : "text-blue-700"
             )}>
               {createModalTab === "customer"
-                ? "Customer will be able to browse the menu, place orders, and use the wallet."
-                : "In production, this will send an invitation email. In dev mode, the account is created locally."
+                ? "Customer account will be created in Supabase Auth and can use the reset-password flow to set a password."
+                : "Staff account will be created in Supabase Auth. Assign outlet access from the Outlets page."
               }
             </p>
           </div>

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fredoka, Nunito } from "next/font/google";
 import { Toaster } from "react-hot-toast";
+import { DevServiceWorkerReset } from "@/components/dev/dev-service-worker-reset";
 import { OfflineIndicator } from "@/components/ui/offline-indicator";
 import "./globals.css";
 
@@ -45,8 +46,6 @@ export const viewport: Viewport = {
   themeColor: "#F5B731",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: "cover",
 };
 
@@ -58,6 +57,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${fredoka.variable} ${nunito.variable} antialiased`} suppressHydrationWarning>
+        <DevServiceWorkerReset />
         {children}
         <OfflineIndicator />
         <Toaster

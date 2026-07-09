@@ -1,13 +1,19 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-export async function updateSession(request: NextRequest) {
+function createSupabaseMiddlewareClient(
+  request: NextRequest,
+  storageKey: string
+) {
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      cookieOptions: {
+        name: storageKey,
+      },
       cookies: {
         getAll() {
           return request.cookies.getAll();
@@ -25,7 +31,17 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
+  return { supabase, getResponse: () => supabaseResponse };
+}
+
+export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const matchesPath = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
+
+  const isAdminRoute = matchesPath("/admin");
+  const storageKey = isAdminRoute ? "sb-admin-auth-token" : "sb-customer-auth-token";
+
+  const { supabase, getResponse } = createSupabaseMiddlewareClient(request, storageKey);
 
   // Public paths — no auth needed
   const publicPaths = [
@@ -33,18 +49,17 @@ export async function updateSession(request: NextRequest) {
     "/reset-password", "/auth/callback", "/restaurant/login",
     "/admin/login",
   ];
-  if (publicPaths.some((p) => pathname.startsWith(p))) {
-    // Still refresh the session cookie
+  if (publicPaths.some(matchesPath)) {
     await supabase.auth.getUser();
-    return supabaseResponse;
+    return getResponse();
   }
 
   // Public customer pages — no auth needed (homepage, outlets, menu, search, cart)
   const publicCustomerPaths = ["/outlets", "/menu", "/search", "/cart"];
   const isHomepage = pathname === "/";
-  if (isHomepage || publicCustomerPaths.some((p) => pathname.startsWith(p))) {
+  if (isHomepage || publicCustomerPaths.some(matchesPath)) {
     await supabase.auth.getUser();
-    return supabaseResponse;
+    return getResponse();
   }
 
   try {
@@ -53,7 +68,7 @@ export async function updateSession(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     // Admin routes — require admin/super_admin role
-    if (pathname.startsWith("/admin")) {
+    if (isAdminRoute) {
       if (!user) {
         const url = request.nextUrl.clone();
         url.pathname = "/admin/login";
@@ -73,11 +88,11 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url);
       }
 
-      return supabaseResponse;
+      return getResponse();
     }
 
     // Restaurant routes — require outlet_staff/admin/super_admin role
-    if (pathname.startsWith("/restaurant")) {
+    if (matchesPath("/restaurant")) {
       if (!user) {
         const url = request.nextUrl.clone();
         url.pathname = "/restaurant/login";
@@ -97,12 +112,12 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url);
       }
 
-      return supabaseResponse;
+      return getResponse();
     }
 
     // Protected customer routes — require any authenticated user
     const protectedPaths = ["/orders", "/wallet", "/loyalty", "/profile", "/notifications", "/referral", "/checkout"];
-    if (protectedPaths.some((p) => pathname.startsWith(p)) && !user) {
+    if (protectedPaths.some(matchesPath) && !user) {
       const url = request.nextUrl.clone();
       url.pathname = "/login";
       url.searchParams.set("redirect", pathname);
@@ -111,12 +126,12 @@ export async function updateSession(request: NextRequest) {
   } catch {
     // Supabase unreachable — redirect to login for protected routes
     const protectedPrefixes = ["/admin", "/restaurant", "/orders", "/wallet", "/loyalty", "/profile", "/notifications", "/referral", "/checkout"];
-    if (protectedPrefixes.some((p) => pathname.startsWith(p))) {
+    if (protectedPrefixes.some(matchesPath)) {
       const url = request.nextUrl.clone();
       url.pathname = "/login";
       return NextResponse.redirect(url);
     }
   }
 
-  return supabaseResponse;
+  return getResponse();
 }

@@ -50,6 +50,8 @@ export interface Database {
           phone: string;
           image_url: string | null;
           is_active: boolean;
+          is_manually_closed: boolean;
+          manual_close_reason: string | null;
           opens_at: string;
           closes_at: string;
           created_at: string;
@@ -148,12 +150,14 @@ export interface Database {
           order_number: string;
           user_id: string;
           outlet_id: string;
-          status: "pending" | "confirmed" | "preparing" | "ready" | "picked_up" | "cancelled";
+          status: "pending" | "confirmed" | "preparing" | "ready" | "picked_up" | "cancelled" | "rejected";
           subtotal: number;
           tax: number;
           packaging_charge: number;
           discount: number;
           wallet_used: number;
+          loyalty_points_used: number;
+          loyalty_discount: number;
           total: number;
           payment_method: "online" | "wallet" | "split";
           payment_status: "pending" | "paid" | "refunded";
@@ -350,11 +354,38 @@ export interface Database {
         Returns: Json;
       };
       place_order_with_wallet: {
-        Args: { p_order: Json; p_items: Json[]; p_wallet_amount: number };
+        Args: {
+          p_order: Json;
+          p_items: Json[];
+          p_wallet_amount: number;
+          p_loyalty_points?: number;
+          p_nth_order_discount?: number;
+        };
         Returns: Json;
       };
       award_loyalty_points: {
         Args: { p_user_id: string; p_action_slug: string; p_reference_id: string };
+        Returns: Json;
+      };
+      update_order_status: {
+        Args: { p_order_id: string; p_status: string };
+        Returns: Json;
+      };
+      complete_order_with_pickup_code: {
+        Args: { p_order_id: string; p_code: string };
+        Returns: Json;
+      };
+      upsert_outlet_menu_item: {
+        Args: {
+          p_outlet_id: string;
+          p_item_id: string;
+          p_is_available: boolean;
+          p_price_override?: number | null;
+        };
+        Returns: Json;
+      };
+      set_pickup_otp_required: {
+        Args: { p_required: boolean };
         Returns: Json;
       };
     };

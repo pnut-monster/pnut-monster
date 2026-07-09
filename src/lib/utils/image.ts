@@ -14,8 +14,8 @@ const CDN_URL = process.env.NEXT_PUBLIC_CDN_URL;
 export function getImageUrl(path: string | null | undefined): string | null {
   if (!path) return null;
 
-  // Already a full URL (S3, CDN, or external)
-  if (path.startsWith("http://") || path.startsWith("https://")) {
+  // Already a full URL (S3, CDN, external) or data URL
+  if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:")) {
     return path;
   }
 

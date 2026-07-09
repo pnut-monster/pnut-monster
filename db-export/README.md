@@ -5,7 +5,7 @@ This folder stores SQL artifacts used for VM development bootstrap and restore.
 ## Primary Files
 
 - `public_schema.sql`: latest exported `public` schema
-- `auth_schema.sql`: latest exported `auth` schema
+- `auth_schema.sql`: latest exported `auth` schema only; auth table data is intentionally omitted
 - `public_data.sql`: latest exported `public` data snapshot for development
 - `LATEST_DUMP_MANIFEST.md`: metadata for current dump set
 
@@ -16,6 +16,10 @@ Every refresh via `./scripts/db/create-latest-dump.sh` writes timestamped copies
 - `db-export/archive/<UTC_TIMESTAMP>/`
 
 ## Refresh Latest Dump
+
+Do not commit auth table data. If a refresh command creates `COPY auth.*`
+blocks with user rows, password hashes, tokens, emails, or audit payloads,
+sanitize the file before committing.
 
 ```bash
 # Local Supabase stack

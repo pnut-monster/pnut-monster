@@ -1,9 +1,6 @@
 export const APP_NAME = "PNUT MONSTER";
 export const APP_TAGLINE = "Healthy never tasted this fun!";
 
-export const TAX_RATE = 0.05; // 5% GST
-export const PACKAGING_CHARGE = 10; // ₹10 flat
-
 export const LOYALTY_TIERS = {
   SPROUT_STAR: "sprout_star",
   SPROUT_HERO: "sprout_hero",
@@ -17,6 +14,7 @@ export const ORDER_STATUS_LABELS: Record<string, string> = {
   ready: "Ready for Pickup",
   picked_up: "Picked Up",
   cancelled: "Cancelled",
+  rejected: "Rejected",
 };
 
 export const ORDER_STATUS_COLORS: Record<string, string> = {
@@ -26,4 +24,5 @@ export const ORDER_STATUS_COLORS: Record<string, string> = {
   ready: "bg-brand-green",
   picked_up: "bg-brand-gray-400",
   cancelled: "bg-brand-red",
+  rejected: "bg-red-700",
 };

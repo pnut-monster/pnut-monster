@@ -33,6 +33,7 @@ const STATUS_BADGE_VARIANT: Record<string, "default" | "success" | "warning" | "
   ready: "success",
   picked_up: "default",
   cancelled: "danger",
+  rejected: "danger",
 };
 
 export default function OrderTrackingPage() {
@@ -148,6 +149,7 @@ export default function OrderTrackingPage() {
 
   const currentStepIndex = STATUS_STEPS.indexOf(order.status);
   const isCancelled = order.status === "cancelled";
+  const isRejected = order.status === "rejected";
 
   return (
     <div className="min-h-screen bg-brand-cream pb-8">
@@ -218,7 +220,7 @@ export default function OrderTrackingPage() {
         )}
 
         {/* Timeline / Stepper */}
-        {!isCancelled && order.status !== "picked_up" ? (
+        {!isCancelled && !isRejected && order.status !== "picked_up" ? (
           <Card>
             <h3 className="font-semibold text-brand-black text-sm mb-4">
               Order Progress
@@ -297,6 +299,15 @@ export default function OrderTrackingPage() {
               {formatDateTime(order.updated_at)}
             </p>
           </Card>
+        ) : isRejected ? (
+          <Card className="border-l-4 border-red-700">
+            <p className="text-sm font-semibold text-red-700">
+              This order was rejected by the outlet
+            </p>
+            <p className="text-xs text-brand-gray-500 mt-1">
+              {formatDateTime(order.updated_at)}
+            </p>
+          </Card>
         ) : null}
 
         {/* Delivery Code — shown when order is ready for pickup */}
@@ -305,7 +316,7 @@ export default function OrderTrackingPage() {
             <p className="text-center text-xs font-semibold text-brand-gray-500 mb-1">
               Show this code at the counter to collect your order
             </p>
-            <DeliveryCode orderNumber={order.order_number} size="lg" />
+            <DeliveryCode orderNumber={order.order_number} code={order.delivery_code} size="lg" />
           </Card>
         )}
 

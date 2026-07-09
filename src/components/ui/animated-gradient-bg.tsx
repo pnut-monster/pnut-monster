@@ -6,6 +6,11 @@ interface AnimatedGradientBgProps {
   variant?: "default" | "vibrant" | "subtle" | "cosmic";
 }
 
+const dots = Array.from({ length: 50 }, (_, i) => ({
+  left: `${((i * 37 + 13) % 100).toString()}%`,
+  top: `${((i * 61 + 29) % 100).toString()}%`,
+}));
+
 export function AnimatedGradientBg({ variant = "default" }: AnimatedGradientBgProps) {
   const variants = {
     default: [
@@ -56,13 +61,13 @@ export function AnimatedGradientBg({ variant = "default" }: AnimatedGradientBgPr
 
       {/* Animated dots pattern */}
       <div className="absolute inset-0">
-        {Array.from({ length: 50 }).map((_, i) => (
+        {dots.map((dot, i) => (
           <motion.div
             key={i}
             className="absolute w-1 h-1 bg-brand-yellow/20 rounded-full"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
+              left: dot.left,
+              top: dot.top,
             }}
             animate={{
               scale: [0, 1, 0],

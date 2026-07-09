@@ -78,11 +78,16 @@ run_dump() {
   fi
 }
 
+sanitize_auth_dump() {
+  perl -0pi -e 's/^COPY auth\.([^\r\n]+) FROM stdin;\r?\n.*?^\\\.\r?\n/-- Data for auth.$1 omitted from repository export.\n/msg' "$1"
+}
+
 echo "Creating public schema dump..."
 run_dump --schema public --file "${TMP_DIR}/public_schema.sql"
 
 echo "Creating auth schema dump..."
 run_dump --schema auth --file "${TMP_DIR}/auth_schema.sql"
+sanitize_auth_dump "${TMP_DIR}/auth_schema.sql"
 
 echo "Creating public data dump..."
 if run_dump --data-only --schema public --file "${TMP_DIR}/public_data.sql"; then

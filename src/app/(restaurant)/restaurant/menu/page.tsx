@@ -16,6 +16,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency, cn } from "@/lib/utils/helpers";
 import type { MenuItem, MenuCategory } from "@/lib/supabase/types";
+import toast from "react-hot-toast";
 
 interface OutletMenuItem {
   item_id: string;
@@ -41,7 +42,6 @@ export default function RestaurantMenuPage() {
 
   useEffect(() => {
     loadMenuData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadMenuData() {
@@ -106,32 +106,30 @@ export default function RestaurantMenuPage() {
     const outletId = localStorage.getItem("pnut_selected_outlet") ?? "";
     const item = items.find((i) => i.id === itemId);
     if (!item) return;
+    if (!outletId) {
+      toast.error("Select an outlet before changing availability");
+      return;
+    }
 
     const newAvailable = !item.is_available;
 
-    // Update locally first for responsiveness
-    setItems((prev) =>
-      prev.map((i) =>
-        i.id === itemId ? { ...i, is_available: newAvailable } : i
-      )
-    );
-
     try {
-      const { error } = await supabase
-        .from("outlet_menu_items")
-        .upsert(
-          {
-            outlet_id: outletId,
-            item_id: itemId,
-            is_available: newAvailable,
-            price_override: item.price_override,
-          } as never,
-          { onConflict: "outlet_id,item_id" }
-        );
+      const { error } = await supabase.rpc("upsert_outlet_menu_item" as never, {
+        p_outlet_id: outletId,
+        p_item_id: itemId,
+        p_is_available: newAvailable,
+        p_price_override: item.price_override,
+      } as never);
 
       if (error) throw error;
+      setItems((prev) =>
+        prev.map((i) =>
+          i.id === itemId ? { ...i, is_available: newAvailable } : i
+        )
+      );
     } catch {
       console.error("[Restaurant Menu] Failed to toggle availability");
+      toast.error("Could not update item availability");
     }
   }
 
@@ -140,42 +138,47 @@ export default function RestaurantMenuPage() {
     const outletId = localStorage.getItem("pnut_selected_outlet") ?? "";
     const item = items.find((i) => i.id === itemId);
     if (!item) return;
+    if (!outletId) {
+      toast.error("Select an outlet before changing prices");
+      return;
+    }
 
     const parsed = priceInput.trim() === "" ? null : parseFloat(priceInput);
-    if (parsed !== null && (isNaN(parsed) || parsed < 0)) return;
-
-    // Update locally
-    setItems((prev) =>
-      prev.map((i) =>
-        i.id === itemId ? { ...i, price_override: parsed } : i
-      )
-    );
-
-    setPriceEditingId(null);
-    setPriceInput("");
+    if (parsed !== null && (isNaN(parsed) || parsed < 0)) {
+      toast.error("Enter a valid price");
+      return;
+    }
 
     try {
-      const { error } = await supabase
-        .from("outlet_menu_items")
-        .upsert(
-          {
-            outlet_id: outletId,
-            item_id: itemId,
-            is_available: item.is_available,
-            price_override: parsed,
-          } as never,
-          { onConflict: "outlet_id,item_id" }
-        );
+      const { error } = await supabase.rpc("upsert_outlet_menu_item" as never, {
+        p_outlet_id: outletId,
+        p_item_id: itemId,
+        p_is_available: item.is_available,
+        p_price_override: parsed,
+      } as never);
 
       if (error) throw error;
+      setItems((prev) =>
+        prev.map((i) =>
+          i.id === itemId ? { ...i, price_override: parsed } : i
+        )
+      );
+      setPriceEditingId(null);
+      setPriceInput("");
     } catch {
       console.error("[Restaurant Menu] Failed to save price override");
+      toast.error("Could not save price override");
     }
   }
 
   async function bulkSetAvailability(categoryName: string, available: boolean) {
     const supabase = createClient();
     const outletId = localStorage.getItem("pnut_selected_outlet") ?? "";
+    if (!outletId) {
+      toast.error("Select an outlet before changing availability");
+      return;
+    }
+    const previousItems = items;
 
     // Update locally
     setItems((prev) =>
@@ -190,18 +193,18 @@ export default function RestaurantMenuPage() {
     const categoryItems = items.filter((i) => i.category_name === categoryName);
     for (const item of categoryItems) {
       try {
-        await supabase
-          .from("outlet_menu_items")
-          .upsert(
-            {
-              outlet_id: outletId,
-              item_id: item.id,
-              is_available: available,
-              price_override: item.price_override,
-            } as never,
-            { onConflict: "outlet_id,item_id" }
-          );
+        const { error } = await supabase.rpc("upsert_outlet_menu_item" as never, {
+          p_outlet_id: outletId,
+          p_item_id: item.id,
+          p_is_available: available,
+          p_price_override: item.price_override,
+        } as never);
+        if (error) throw error;
       } catch {
+        console.error("[Restaurant Menu] Failed to bulk update availability");
+        setItems(previousItems);
+        toast.error("Could not update category availability");
+        return;
         // Failed — already updated locally
       }
     }

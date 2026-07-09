@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Store, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/lib/supabase/types";
+import toast from "react-hot-toast";
 
 export default function RestaurantLoginPage() {
   const router = useRouter();
@@ -16,6 +17,13 @@ export default function RestaurantLoginPage() {
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
+    if (!email.trim() || !password) {
+      const message = "Please enter email and password";
+      setError(message);
+      toast.error(message);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -45,26 +53,47 @@ export default function RestaurantLoginPage() {
         !["outlet_staff", "admin", "super_admin"].includes(typedProfile.role)
       ) {
         await supabase.auth.signOut();
-        setError("You do not have access to the restaurant panel.");
+        const message = "You do not have access to the restaurant panel.";
+        setError(message);
+        toast.error(message);
         setLoading(false);
         return;
       }
 
-      // Fetch managed outlets
-      const { data: outletsData } = await supabase
-        .from("outlets")
-        .select("id")
-        .eq("is_active", true);
-      const outlets = outletsData as { id: string }[] | null;
+      let outlets: { id: string }[] = [];
+      if (["admin", "super_admin"].includes(typedProfile.role)) {
+        const { data: outletsData } = await supabase
+          .from("outlets")
+          .select("id")
+          .eq("is_active", true);
+        outlets = (outletsData as { id: string }[] | null) ?? [];
+      } else {
+        const { data: assignments } = await supabase
+          .from("outlet_staff" as never)
+          .select("outlet_id")
+          .eq("user_id" as never, data.user.id as never);
+        const outletIds = ((assignments as { outlet_id: string }[] | null) ?? [])
+          .map((assignment) => assignment.outlet_id);
+        if (outletIds.length > 0) {
+          const { data: outletsData } = await supabase
+            .from("outlets")
+            .select("id")
+            .in("id", outletIds)
+            .eq("is_active", true);
+          outlets = (outletsData as { id: string }[] | null) ?? [];
+        }
+      }
 
-      if (outlets && outlets.length > 0) {
+      if (outlets.length > 0) {
         localStorage.setItem("pnut_selected_outlet", outlets[0].id);
       }
 
+      toast.success("Logged in successfully.");
       router.push("/restaurant");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed";
       setError(message);
+      toast.error(message);
       setLoading(false);
     }
   }

@@ -10,7 +10,7 @@ import {
   ToggleRight,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { formatCurrency, formatTime } from "@/lib/utils/helpers";
+import { formatCurrency } from "@/lib/utils/helpers";
 import { ORDER_STATUS_LABELS } from "@/lib/utils/constants";
 import type { Order, OrderItem } from "@/lib/supabase/types";
 

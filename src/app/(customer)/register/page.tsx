@@ -68,6 +68,7 @@ export default function RegisterPage() {
 
       // If email confirmation is required, redirect to verify page
       if (data.user && !data.session) {
+        toast.success("Signup successful. Please check your email to verify your account.");
         sessionStorage.setItem("pnut_verify_email", email.trim());
         router.push("/verify");
       } else {

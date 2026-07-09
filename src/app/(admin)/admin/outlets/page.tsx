@@ -11,7 +11,6 @@ import {
   Trash2,
   MapPin,
   Phone,
-  Clock,
   ToggleLeft,
   ToggleRight,
   Building2,
@@ -19,7 +18,10 @@ import {
   ShoppingBag,
   ExternalLink,
   UserPlus,
+  DoorOpen,
+  DoorClosed,
 } from "lucide-react";
+import toast from "react-hot-toast";
 
 type OutletForm = {
   name: string;
@@ -51,14 +53,10 @@ const EMPTY_FORM: OutletForm = {
   is_active: true,
 };
 
-type StaffMember = Profile;
+type StaffMember = Profile & { is_manager?: boolean };
 
 function isOutletOpen(outlet: Outlet): boolean {
-  const now = new Date();
-  const hours = now.getHours();
-  const minutes = now.getMinutes();
-  const currentTime = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-  return outlet.is_active && currentTime >= outlet.opens_at && currentTime <= outlet.closes_at;
+  return outlet.is_active && !outlet.is_manually_closed;
 }
 
 export default function AdminOutletsPage() {
@@ -76,6 +74,11 @@ export default function AdminOutletsPage() {
   const [outletStaff, setOutletStaff] = useState<StaffMember[]>([]);
   const [allStaff, setAllStaff] = useState<StaffMember[]>([]);
   const [staffLoading, setStaffLoading] = useState(false);
+
+  // Manual close/open
+  const [manualCloseOutlet, setManualCloseOutlet] = useState<Outlet | null>(null);
+  const [closeReason, setCloseReason] = useState("");
+  const [closeSaving, setCloseSaving] = useState(false);
 
   // Menu counts per outlet
   const [menuCounts, setMenuCounts] = useState<Record<string, number>>({});
@@ -182,20 +185,11 @@ export default function AdminOutletsPage() {
         const { error } = await supabase.from("outlets").insert(payload as never);
         if (error) throw error;
       }
-    } catch {
-      console.warn("[admin/outlets] Save failed, updating local state");
-      if (editingOutlet) {
-        setOutlets((prev) => prev.map((o) => (o.id === editingOutlet.id ? { ...o, ...payload } : o)));
-      } else {
-        const newOutlet: Outlet = {
-          ...payload,
-          id: `local-${Date.now()}`,
-          image_url: payload.image_url,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        setOutlets((prev) => [newOutlet, ...prev]);
-      }
+    } catch (err) {
+      console.error("[admin/outlets] Save failed:", err);
+      toast.error("Could not save outlet");
+      setSaving(false);
+      return;
     }
 
     setSaving(false);
@@ -207,9 +201,11 @@ export default function AdminOutletsPage() {
     try {
       const { error } = await supabase.from("outlets").delete().eq("id", outlet.id);
       if (error) throw error;
-    } catch {
-      console.warn("[admin/outlets] Delete failed, updating local state");
-      setOutlets((prev) => prev.filter((o) => o.id !== outlet.id));
+    } catch (err) {
+      console.error("[admin/outlets] Delete failed:", err);
+      toast.error("Could not delete outlet");
+      setDeleteConfirm(null);
+      return;
     }
     setDeleteConfirm(null);
     fetchOutlets();
@@ -217,16 +213,50 @@ export default function AdminOutletsPage() {
 
   const toggleActive = async (outlet: Outlet) => {
     try {
-      await supabase
+      const { error } = await supabase
         .from("outlets")
         .update({ is_active: !outlet.is_active } as never)
         .eq("id", outlet.id);
-    } catch {
-      // update locally
+      if (error) throw error;
+    } catch (err) {
+      console.error("[admin/outlets] Toggle active failed:", err);
+      toast.error("Could not update outlet");
+      return;
     }
     setOutlets((prev) =>
       prev.map((o) => (o.id === outlet.id ? { ...o, is_active: !o.is_active } : o))
     );
+  };
+
+  // Manual close/open toggle
+  const handleManualClose = async () => {
+    if (!manualCloseOutlet) return;
+    setCloseSaving(true);
+    const isClosing = !manualCloseOutlet.is_manually_closed;
+    const payload = {
+      is_manually_closed: isClosing,
+      manual_close_reason: isClosing ? closeReason || null : null,
+    };
+    try {
+      const { error } = await supabase
+        .from("outlets")
+        .update(payload as never)
+        .eq("id", manualCloseOutlet.id);
+      if (error) throw error;
+    } catch (err) {
+      console.error("[admin/outlets] Manual close update failed:", err);
+      toast.error("Could not update outlet");
+      setCloseSaving(false);
+      return;
+    }
+    setOutlets((prev) =>
+      prev.map((o) =>
+        o.id === manualCloseOutlet.id ? { ...o, ...payload } : o
+      )
+    );
+    setCloseSaving(false);
+    setManualCloseOutlet(null);
+    setCloseReason("");
   };
 
   // Staff management
@@ -234,22 +264,89 @@ export default function AdminOutletsPage() {
     setStaffModalOutlet(outlet);
     setStaffLoading(true);
     try {
-      // Get all outlet_staff profiles
-      const { data: staffData } = await supabase
+      const { data: staffData, error: staffError } = await supabase
         .from("profiles")
         .select("*")
         .eq("role", "outlet_staff");
-      setAllStaff((staffData as StaffMember[] | null) ?? []);
+      if (staffError) throw staffError;
 
-      // For now, we do not have a dedicated outlet_staff_assignments table,
-      // so we show all staff. In production, filter by outlet assignment.
-      setOutletStaff((staffData as StaffMember[] | null) ?? []);
-    } catch {
-      console.warn("[admin/outlets] Staff fetch failed");
+      const { data: assignmentData, error: assignmentError } = await supabase
+        .from("outlet_staff" as never)
+        .select("user_id,is_manager")
+        .eq("outlet_id" as never, outlet.id as never);
+      if (assignmentError) throw assignmentError;
+
+      const assignments = (assignmentData as { user_id: string; is_manager: boolean }[] | null) ?? [];
+      const assignmentMap = new Map(assignments.map((a) => [a.user_id, a.is_manager]));
+      const staffProfiles = ((staffData as Profile[] | null) ?? []) as StaffMember[];
+
+      setAllStaff(staffProfiles);
+      setOutletStaff(
+        staffProfiles
+          .filter((staff) => assignmentMap.has(staff.id))
+          .map((staff) => ({ ...staff, is_manager: assignmentMap.get(staff.id) ?? false }))
+      );
+    } catch (err) {
+      console.error("[admin/outlets] Staff fetch failed:", err);
+      toast.error("Could not load staff assignments");
       setAllStaff([]);
       setOutletStaff([]);
     }
     setStaffLoading(false);
+  };
+
+  const assignStaff = async (staff: StaffMember) => {
+    if (!staffModalOutlet) return;
+    try {
+      const { error } = await supabase.from("outlet_staff" as never).insert({
+        outlet_id: staffModalOutlet.id,
+        user_id: staff.id,
+        is_manager: false,
+      } as never);
+      if (error) throw error;
+      setOutletStaff((prev) => [...prev, { ...staff, is_manager: false }]);
+      toast.success("Staff assigned");
+    } catch (err) {
+      console.error("[admin/outlets] Staff assignment failed:", err);
+      toast.error("Could not assign staff");
+    }
+  };
+
+  const removeStaff = async (staff: StaffMember) => {
+    if (!staffModalOutlet) return;
+    try {
+      const { error } = await supabase
+        .from("outlet_staff" as never)
+        .delete()
+        .eq("outlet_id" as never, staffModalOutlet.id as never)
+        .eq("user_id" as never, staff.id as never);
+      if (error) throw error;
+      setOutletStaff((prev) => prev.filter((s) => s.id !== staff.id));
+      toast.success("Staff removed");
+    } catch (err) {
+      console.error("[admin/outlets] Staff removal failed:", err);
+      toast.error("Could not remove staff");
+    }
+  };
+
+  const toggleStaffManager = async (staff: StaffMember) => {
+    if (!staffModalOutlet) return;
+    const next = !staff.is_manager;
+    try {
+      const { error } = await supabase
+        .from("outlet_staff" as never)
+        .update({ is_manager: next } as never)
+        .eq("outlet_id" as never, staffModalOutlet.id as never)
+        .eq("user_id" as never, staff.id as never);
+      if (error) throw error;
+      setOutletStaff((prev) =>
+        prev.map((s) => (s.id === staff.id ? { ...s, is_manager: next } : s))
+      );
+      toast.success(next ? "Manager access granted" : "Manager access removed");
+    } catch (err) {
+      console.error("[admin/outlets] Manager toggle failed:", err);
+      toast.error("Could not update staff access");
+    }
   };
 
   return (
@@ -322,10 +419,6 @@ export default function AdminOutletsPage() {
                     <Phone className="w-3.5 h-3.5" />
                     {outlet.phone}
                   </span>
-                  <span className="flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5" />
-                    {outlet.opens_at} &ndash; {outlet.closes_at}
-                  </span>
                 </div>
 
                 {/* Stats row */}
@@ -340,6 +433,41 @@ export default function AdminOutletsPage() {
                   </span>
                 </div>
 
+                {/* Manual Close/Open Button */}
+                {outlet.is_active && (
+                  <div className="pt-2">
+                    <button
+                      onClick={() => {
+                        setManualCloseOutlet(outlet);
+                        setCloseReason(outlet.manual_close_reason ?? "");
+                      }}
+                      className={cn(
+                        "w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-colors",
+                        outlet.is_manually_closed
+                          ? "bg-green-50 text-green-700 hover:bg-green-100 border border-green-200"
+                          : "bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
+                      )}
+                    >
+                      {outlet.is_manually_closed ? (
+                        <>
+                          <DoorOpen className="w-4 h-4" />
+                          Reopen Outlet
+                        </>
+                      ) : (
+                        <>
+                          <DoorClosed className="w-4 h-4" />
+                          Close Outlet
+                        </>
+                      )}
+                    </button>
+                    {outlet.is_manually_closed && outlet.manual_close_reason && (
+                      <p className="text-xs text-red-500 mt-1.5 text-center italic">
+                        {outlet.manual_close_reason}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* Status + Actions */}
                 <div className="flex items-center justify-between mt-auto pt-3 border-t border-brand-gray-100">
                   <div className="flex items-center gap-2">
@@ -353,6 +481,11 @@ export default function AdminOutletsPage() {
                     >
                       {open ? "Open Now" : "Closed"}
                     </span>
+                    {outlet.is_manually_closed && (
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-orange-100 text-orange-700">
+                        Manually Closed
+                      </span>
+                    )}
                     {!outlet.is_active && (
                       <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-brand-gray-100 text-brand-gray-500">
                         Disabled
@@ -456,20 +589,6 @@ export default function AdminOutletsPage() {
               onChange={(e) => setForm({ ...form, longitude: e.target.value })}
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Opens At"
-              type="time"
-              value={form.opens_at}
-              onChange={(e) => setForm({ ...form, opens_at: e.target.value })}
-            />
-            <Input
-              label="Closes At"
-              type="time"
-              value={form.closes_at}
-              onChange={(e) => setForm({ ...form, closes_at: e.target.value })}
-            />
-          </div>
           <div>
             <label className="text-sm font-semibold text-brand-gray-700 mb-1.5 block">Outlet Image</label>
             <ImageUpload
@@ -519,6 +638,52 @@ export default function AdminOutletsPage() {
             Delete
           </Button>
         </div>
+      </Modal>
+
+      {/* Manual Close/Open Modal */}
+      <Modal
+        open={!!manualCloseOutlet}
+        onClose={() => { setManualCloseOutlet(null); setCloseReason(""); }}
+        title={manualCloseOutlet?.is_manually_closed ? "Reopen Outlet" : "Close Outlet"}
+        className="max-w-sm"
+      >
+        {manualCloseOutlet && (
+          <>
+            {manualCloseOutlet.is_manually_closed ? (
+              <p className="text-sm text-brand-gray-600">
+                Reopen <strong>{manualCloseOutlet.name}</strong>? It will resume accepting orders based on its scheduled hours.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-sm text-brand-gray-600">
+                  Close <strong>{manualCloseOutlet.name}</strong> immediately? It will stop accepting new orders until reopened.
+                </p>
+                <Input
+                  label="Reason (optional)"
+                  value={closeReason}
+                  onChange={(e) => setCloseReason(e.target.value)}
+                  placeholder="e.g. Staff shortage, maintenance, weather"
+                />
+              </div>
+            )}
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-brand-gray-100">
+              <Button variant="ghost" size="sm" onClick={() => { setManualCloseOutlet(null); setCloseReason(""); }}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                loading={closeSaving}
+                className={manualCloseOutlet.is_manually_closed
+                  ? "bg-green-600 hover:bg-green-700 text-white"
+                  : "bg-red-500 hover:bg-red-600 text-white"
+                }
+                onClick={handleManualClose}
+              >
+                {manualCloseOutlet.is_manually_closed ? "Reopen" : "Close Outlet"}
+              </Button>
+            </div>
+          </>
+        )}
       </Modal>
 
       {/* Staff Management Modal */}
@@ -572,25 +737,35 @@ export default function AdminOutletsPage() {
                         {staff.email ?? staff.phone ?? "No contact"}
                       </p>
                     </div>
-                    <Badge variant="info">Staff</Badge>
+                    <Badge variant={staff.is_manager ? "warning" : "info"}>
+                      {staff.is_manager ? "Manager" : "Staff"}
+                    </Badge>
+                    <Button size="sm" variant="ghost" onClick={() => toggleStaffManager(staff)}>
+                      {staff.is_manager ? "Demote" : "Manager"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => removeStaff(staff)}>
+                      Remove
+                    </Button>
                   </div>
                 ))}
               </div>
             )}
 
             {/* Available staff to assign */}
-            {allStaff.length > 0 && (
+            {allStaff.filter((staff) => !outletStaff.some((assigned) => assigned.id === staff.id)).length > 0 && (
               <div>
                 <p className="text-xs font-semibold text-brand-gray-500 uppercase tracking-wider mb-2">
                   Available Staff
                 </p>
                 <div className="bg-brand-gray-50 rounded-lg p-3 space-y-2">
-                  {allStaff.map((staff) => (
+                  {allStaff
+                    .filter((staff) => !outletStaff.some((assigned) => assigned.id === staff.id))
+                    .map((staff) => (
                     <div key={staff.id} className="flex items-center justify-between text-sm">
                       <span className="text-brand-gray-700">
                         {staff.full_name ?? "Unnamed"} ({staff.email ?? staff.phone})
                       </span>
-                      <Button size="sm" variant="ghost">
+                      <Button size="sm" variant="ghost" onClick={() => assignStaff(staff)}>
                         <Plus className="w-3 h-3" />
                         Assign
                       </Button>

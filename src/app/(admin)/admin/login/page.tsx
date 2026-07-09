@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Input } from "@/components/ui";
 import { Lock, Mail, AlertCircle } from "lucide-react";
+import toast from "react-hot-toast";
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
@@ -16,7 +17,9 @@ export default function AdminLoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
-      setError("Please enter email and password");
+      const message = "Please enter email and password";
+      setError(message);
+      toast.error(message);
       return;
     }
 
@@ -34,35 +37,44 @@ export default function AdminLoginPage() {
 
       if (authError) {
         setError(authError.message);
+        toast.error(authError.message);
         setLoading(false);
         return;
       }
 
       if (!data.user) {
-        setError("Login failed. Please try again.");
+        const message = "Login failed. Please try again.";
+        setError(message);
+        toast.error(message);
         setLoading(false);
         return;
       }
 
-      // Step 2: Verify admin role
-      const { data: profile } = await client
-        .from("profiles")
-        .select("role")
-        .eq("id", data.user.id)
-        .single() as { data: { role: string } | null };
+      // Step 2: Verify admin role using service-role via API to bypass RLS timing
+      const verifyRes = await fetch("/api/admin/verify-role", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: data.user.id }),
+      });
 
-      if (!profile || (profile.role !== "admin" && profile.role !== "super_admin")) {
-        setError("Access denied. Admin or Super Admin role required.");
+      const { role } = await verifyRes.json();
+
+      if (!verifyRes.ok || (role !== "admin" && role !== "super_admin")) {
+        const message = "Access denied. Admin or Super Admin role required.";
+        setError(message);
+        toast.error(message);
         await client.auth.signOut();
         setLoading(false);
         return;
       }
 
+      toast.success("Logged in successfully.");
       router.push("/admin");
     } catch (err: unknown) {
       console.error("Admin login error:", err);
       const message = err instanceof Error ? err.message : "Login failed";
       setError(message);
+      toast.error(message);
       setLoading(false);
     }
   };

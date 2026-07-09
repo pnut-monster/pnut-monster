@@ -99,8 +99,8 @@ docker --version
 ## 4) Clone and Install
 
 ```bash
-git clone <YOUR_REPO_URL> pnut-monster
-cd pnut-monster
+git clone https://github.com/host-havone/newpnut.git newpnut
+cd newpnut
 npm install
 ```
 

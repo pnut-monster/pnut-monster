@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
@@ -15,7 +15,6 @@ import { useCartStore } from "@/lib/stores/cart-store";
 import { useOutletStore } from "@/lib/stores/outlet-store";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils/helpers";
-import { TAX_RATE, PACKAGING_CHARGE } from "@/lib/utils/constants";
 import type { Coupon } from "@/lib/supabase/types";
 import toast from "react-hot-toast";
 
@@ -40,12 +39,36 @@ export default function CartPage() {
   const [couponInput, setCouponInput] = useState(coupon_code ?? "");
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState<string | null>(null);
+  const [taxRate, setTaxRate] = useState(0.05);
+  const [packagingCharge, setPackagingCharge] = useState(10);
+  const [packagingMode, setPackagingMode] = useState<"per_order" | "per_item">("per_order");
+
+  useEffect(() => {
+    async function loadSettings() {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("app_settings")
+        .select("key, value")
+        .in("key", ["tax_rate", "packaging_charge", "packaging_mode"]);
+      if (data) {
+        for (const row of data as { key: string; value: string }[]) {
+          if (row.key === "tax_rate") setTaxRate(parseFloat(row.value));
+          if (row.key === "packaging_charge") setPackagingCharge(parseFloat(row.value));
+          if (row.key === "packaging_mode") setPackagingMode(row.value as "per_order" | "per_item");
+        }
+      }
+    }
+    loadSettings();
+  }, []);
 
   const subtotal = getSubtotal();
   const discount = coupon_discount;
   const taxableAmount = subtotal - discount;
-  const tax = Math.round(taxableAmount * TAX_RATE * 100) / 100;
-  const packaging = items.length > 0 ? PACKAGING_CHARGE : 0;
+  const tax = Math.round(taxableAmount * taxRate * 100) / 100;
+  const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
+  const packaging = items.length > 0
+    ? (packagingMode === "per_item" ? packagingCharge * itemCount : packagingCharge)
+    : 0;
   const total = taxableAmount + tax + packaging;
 
   const handleApplyCoupon = async () => {
@@ -353,7 +376,7 @@ export default function CartPage() {
               </div>
             )}
             <div className="flex justify-between text-brand-gray-600">
-              <span>Tax (5%)</span>
+              <span>Tax ({Math.round(taxRate * 100 * 10) / 10}%)</span>
               <span>{formatCurrency(tax)}</span>
             </div>
             <div className="flex justify-between text-brand-gray-600">

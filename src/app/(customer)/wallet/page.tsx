@@ -4,14 +4,14 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Wallet,
-  Plus,
   ArrowUpRight,
   ArrowDownRight,
   Star,
   RotateCcw,
-  IndianRupee,
   Loader2,
   ChevronLeft,
+  Gift,
+  Plus,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency, formatDateTime, cn } from "@/lib/utils/helpers";
@@ -20,36 +20,10 @@ import { EmptyState } from "@/components/ui/empty-state";
 import type {
   Wallet as WalletType,
   WalletTransaction,
-  Campaign,
-  Json,
 } from "@/lib/supabase/types";
 import toast from "react-hot-toast";
 
-const AMOUNT_PRESETS = [100, 200, 500, 1000];
-
-interface TopupBonusConfig {
-  slabs?: { min_amount: number; bonus_percent: number }[];
-}
-
-function getBonusForAmount(
-  amount: number,
-  campaign: Campaign | null
-): number {
-  if (!campaign) return 0;
-  const config = campaign.config as TopupBonusConfig;
-  if (!config?.slabs || !Array.isArray(config.slabs)) return 0;
-
-  // Sort slabs descending by min_amount so we match the highest qualifying slab
-  const sorted = [...config.slabs].sort(
-    (a, b) => b.min_amount - a.min_amount
-  );
-  for (const slab of sorted) {
-    if (amount >= slab.min_amount) {
-      return Math.round((amount * slab.bonus_percent) / 100);
-    }
-  }
-  return 0;
-}
+const TOPUP_PRESETS = [100, 200, 500, 1000];
 
 function TransactionIcon({ type }: { type: WalletTransaction["type"] }) {
   switch (type) {
@@ -87,17 +61,30 @@ export default function WalletPage() {
   const [loading, setLoading] = useState(true);
   const [wallet, setWallet] = useState<WalletType | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
-  const [bonusCampaign, setBonusCampaign] = useState<Campaign | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
 
-  // Add money state
-  const [showAddMoney, setShowAddMoney] = useState(false);
-  const [selectedAmount, setSelectedAmount] = useState<number>(0);
-  const [customAmount, setCustomAmount] = useState("");
-  const [topUpLoading, setTopUpLoading] = useState(false);
+  // Top-up state
+  const [showTopup, setShowTopup] = useState(false);
+  const [topupAmount, setTopupAmount] = useState("");
+  const [topupLoading, setTopupLoading] = useState(false);
 
-  const activeAmount = selectedAmount || Number(customAmount) || 0;
-  const bonusAmount = getBonusForAmount(activeAmount, bonusCampaign);
+  // Gift card redeem state
+  const [showGiftCard, setShowGiftCard] = useState(false);
+  const [giftCardCode, setGiftCardCode] = useState("");
+  const [giftCardLoading, setGiftCardLoading] = useState(false);
+
+  // Transaction pagination
+  const [txPage, setTxPage] = useState(0);
+  const TX_PAGE_SIZE = 10;
+
+  // Load Razorpay script
+  useEffect(() => {
+    if (document.getElementById("razorpay-script")) return;
+    const script = document.createElement("script");
+    script.id = "razorpay-script";
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    document.body.appendChild(script);
+  }, []);
 
   const fetchData = useCallback(async () => {
     try {
@@ -108,9 +95,7 @@ export default function WalletPage() {
         setLoading(false);
         return;
       }
-      setUserId(user.id);
 
-      // Fetch wallet
       const { data: walletData } = await supabase
         .from("wallets")
         .select("*")
@@ -119,7 +104,6 @@ export default function WalletPage() {
       const w = walletData as WalletType | null;
       setWallet(w);
 
-      // Fetch transactions
       if (w) {
         const { data: txData } = await supabase
           .from("wallet_transactions")
@@ -130,65 +114,133 @@ export default function WalletPage() {
         const txs = (txData ?? []) as WalletTransaction[];
         setTransactions(txs);
       }
-
-      // Fetch active wallet_topup_bonus campaign
-      const now = new Date().toISOString();
-      const { data: campaignData } = await supabase
-        .from("campaigns")
-        .select("*")
-        .eq("type", "wallet_topup_bonus")
-        .eq("is_active", true)
-        .lte("starts_at", now)
-        .gte("ends_at", now)
-        .limit(1)
-        .single();
-      const camp = campaignData as Campaign | null;
-      setBonusCampaign(camp);
     } catch (err) {
       console.error("Failed to fetch wallet data:", err);
     } finally {
       setLoading(false);
     }
-  }, [supabase, router]);
+  }, [supabase]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const handleTopUp = async () => {
-    if (!userId || activeAmount < 1) return;
-    setTopUpLoading(true);
-    try {
-      const { data, error } = await supabase.rpc("topup_wallet" as never, {
-        p_user_id: userId,
-        p_amount: activeAmount,
-        p_bonus: bonusAmount,
-        p_reference_id: "mock_" + Date.now(),
-      } as never);
-      const result = data as Json;
+  const handleTopup = async () => {
+    const amount = parseFloat(topupAmount);
+    if (!amount || amount < 1) {
+      toast.error("Enter a valid amount (minimum ₹1)");
+      return;
+    }
 
-      if (error) {
-        toast.error(error.message);
+    setTopupLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Please login to continue");
         return;
       }
 
-      toast.success(
-        `Added ${formatCurrency(activeAmount)}${
-          bonusAmount > 0 ? ` + ${formatCurrency(bonusAmount)} bonus` : ""
-        } to wallet!`
-      );
+      // Create Razorpay order
+      const res = await fetch("/api/razorpay/wallet-topup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create-order",
+          amount,
+          accessToken: session.access_token,
+        }),
+      });
 
-      // Reset and refetch
-      setShowAddMoney(false);
-      setSelectedAmount(0);
-      setCustomAmount("");
+      if (!res.ok) {
+        const err = await res.json();
+        toast.error(err.error || "Failed to create payment");
+        setTopupLoading(false);
+        return;
+      }
+
+      const order = await res.json();
+
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!,
+        amount: order.amount,
+        currency: order.currency,
+        name: "PNUT Monster",
+        description: "Wallet Top-up",
+        order_id: order.id,
+        handler: async (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
+          try {
+            const verifyRes = await fetch("/api/razorpay/wallet-topup", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "verify",
+                amount,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                accessToken: session.access_token,
+              }),
+            });
+
+            if (!verifyRes.ok) {
+              const err = await verifyRes.json();
+              toast.error(err.error || "Payment verification failed");
+              setTopupLoading(false);
+              return;
+            }
+
+            toast.success(`${formatCurrency(amount)} added to wallet!`);
+            setShowTopup(false);
+            setTopupAmount("");
+            setTopupLoading(false);
+            setLoading(true);
+            await fetchData();
+          } catch {
+            toast.error("Payment verification failed");
+            setTopupLoading(false);
+          }
+        },
+        prefill: {
+          email: session.user?.email || "",
+        },
+        theme: { color: "#4CAF50" },
+        modal: {
+          ondismiss: () => {
+            setTopupLoading(false);
+          },
+        },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on("payment.failed", (response: { error: { description: string } }) => {
+        toast.error(response.error.description || "Payment failed");
+        setTopupLoading(false);
+      });
+      rzp.open();
+    } catch {
+      toast.error("Something went wrong");
+      setTopupLoading(false);
+    }
+  };
+
+  const handleRedeemGiftCard = async () => {
+    const code = giftCardCode.trim();
+    if (!code) { toast.error("Enter a gift card code"); return; }
+    setGiftCardLoading(true);
+    try {
+      const { data, error } = await supabase.rpc("redeem_gift_card" as never, { p_redeem_code: code } as never);
+      if (error) { toast.error(error.message); return; }
+      const result = data as { success: boolean; error?: string; wallet_credit?: number; gift_card_id?: string };
+      if (!result.success) { toast.error(result.error ?? "Redemption failed"); return; }
+      toast.success(`Gift card redeemed! ${formatCurrency(result.wallet_credit ?? 0)} added to wallet.`);
+      setShowGiftCard(false);
+      setGiftCardCode("");
       setLoading(true);
       await fetchData();
-    } catch (err) {
-      console.error("Failed to top up wallet:", err);
-      toast.error("Failed to add money. Please try again.");
+    } catch {
+      toast.error("Something went wrong. Please try again.");
     } finally {
-      setTopUpLoading(false);
+      setGiftCardLoading(false);
     }
   };
 
@@ -226,7 +278,6 @@ export default function WalletPage() {
       <div className="px-4 py-6 space-y-5 max-w-lg mx-auto">
         {/* Balance Card */}
         <div className="bg-gradient-to-br from-brand-green via-brand-green to-brand-green-dark rounded-2xl p-6 shadow-xl relative overflow-hidden border border-brand-green-dark/20">
-          {/* Decorative */}
           <div className="absolute -right-8 -top-8 w-32 h-32 bg-white/10 rounded-full" />
           <div className="absolute -right-4 bottom-0 w-20 h-20 bg-white/5 rounded-full" />
 
@@ -259,113 +310,140 @@ export default function WalletPage() {
         </div>
 
         {/* Add Money Button */}
-        {!showAddMoney && (
+        {!showTopup && (
           <button
-            onClick={() => setShowAddMoney(true)}
-            className="w-full flex items-center justify-center gap-2 bg-brand-yellow text-brand-black font-bold py-3.5 rounded-xl text-sm hover:bg-brand-yellow-dark hover:shadow-lg transition-all shadow-md"
+            onClick={() => setShowTopup(true)}
+            className="w-full flex items-center justify-center gap-2 bg-brand-green text-white font-bold py-3.5 rounded-xl text-sm hover:bg-brand-green-dark transition-all shadow-md"
           >
             <Plus className="w-4 h-4" />
-            Add Money
+            Add Money to Wallet
           </button>
         )}
 
-        {/* Add Money Section */}
-        {showAddMoney && (
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-brand-gray-200 space-y-4">
+        {/* Top-up Form */}
+        {showTopup && (
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-brand-green/20 space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[10px] font-bold text-brand-gray-500 uppercase tracking-wider">ADD MONEY</p>
+                <p className="text-[10px] font-bold text-brand-green uppercase tracking-wider">TOP UP</p>
                 <h3 className="font-heading text-base font-bold text-brand-black">
-                  Choose Amount
+                  Add Money
                 </h3>
               </div>
-            <button
-              onClick={() => {
-                setShowAddMoney(false);
-                setSelectedAmount(0);
-                setCustomAmount("");
-              }}
-              className="text-xs text-brand-gray-500 font-medium hover:text-brand-gray-700"
-            >
-              Cancel
-            </button>
-          </div>
-
-          {/* Amount Presets */}
-          <div className="grid grid-cols-4 gap-2">
-            {AMOUNT_PRESETS.map((amt) => (
               <button
-                key={amt}
-                onClick={() => {
-                  setSelectedAmount(amt);
-                  setCustomAmount("");
-                }}
-                className={cn(
-                  "py-2.5 rounded-xl text-sm font-bold border-2 transition-colors",
-                  selectedAmount === amt
-                    ? "border-brand-yellow bg-brand-yellow/10 text-brand-black"
-                    : "border-brand-gray-200 text-brand-gray-600 hover:border-brand-gray-300"
-                )}
+                onClick={() => { setShowTopup(false); setTopupAmount(""); }}
+                className="text-xs text-brand-gray-500 font-medium hover:text-brand-gray-700"
               >
-                {formatCurrency(amt)}
+                Cancel
               </button>
-            ))}
-          </div>
+            </div>
 
-          {/* Custom Amount */}
-          <div>
-            <label className="block text-xs font-semibold text-brand-gray-500 mb-1.5">
-              Or enter custom amount
-            </label>
-            <div className="flex items-center border-2 border-brand-gray-200 rounded-xl focus-within:border-brand-yellow transition-colors">
-              <div className="pl-3 pr-2">
-                <IndianRupee className="w-4 h-4 text-brand-gray-400" />
-              </div>
+            {/* Preset amounts */}
+            <div className="grid grid-cols-4 gap-2">
+              {TOPUP_PRESETS.map((preset) => (
+                <button
+                  key={preset}
+                  onClick={() => setTopupAmount(String(preset))}
+                  className={cn(
+                    "py-2.5 rounded-xl text-sm font-bold border-2 transition-all",
+                    topupAmount === String(preset)
+                      ? "border-brand-green bg-brand-green/10 text-brand-green-dark"
+                      : "border-brand-gray-200 text-brand-gray-600 hover:border-brand-green/50"
+                  )}
+                >
+                  ₹{preset}
+                </button>
+              ))}
+            </div>
+
+            {/* Custom amount */}
+            <div className="flex items-center border-2 border-brand-gray-200 rounded-xl focus-within:border-brand-green transition-colors">
+              <div className="pl-4 pr-1 text-lg font-bold text-brand-gray-400">₹</div>
               <input
                 type="number"
-                inputMode="numeric"
                 placeholder="Enter amount"
-                value={customAmount}
-                onChange={(e) => {
-                  setCustomAmount(e.target.value);
-                  setSelectedAmount(0);
-                }}
-                className="flex-1 px-2 py-3 text-sm bg-transparent outline-none placeholder:text-brand-gray-400"
-                min={1}
+                value={topupAmount}
+                onChange={(e) => setTopupAmount(e.target.value)}
+                className="flex-1 px-2 py-3 text-lg font-bold bg-transparent outline-none placeholder:text-brand-gray-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                min="1"
               />
             </div>
+
+            <button
+              onClick={handleTopup}
+              disabled={topupLoading || !topupAmount || parseFloat(topupAmount) < 1}
+              className="w-full flex items-center justify-center gap-2 bg-brand-green text-white font-bold py-3.5 rounded-xl text-sm hover:bg-brand-green-dark transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+            >
+              {topupLoading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  <Wallet className="w-4 h-4" />
+                  Pay {topupAmount ? formatCurrency(parseFloat(topupAmount) || 0) : ""}
+                </>
+              )}
+            </button>
           </div>
+        )}
 
-          {/* Bonus Info */}
-          {bonusCampaign && activeAmount > 0 && bonusAmount > 0 && (
-            <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
-              <Star className="w-4 h-4 text-green-600 shrink-0" />
-              <p className="text-sm text-green-700">
-                You&apos;ll get{" "}
-                <span className="font-bold">{formatCurrency(bonusAmount)}</span>{" "}
-                bonus!
-              </p>
-            </div>
-          )}
-
-          {/* Confirm Button */}
+        {/* Gift Card Redeem */}
+        {!showGiftCard && !showTopup && (
           <button
-            onClick={handleTopUp}
-            disabled={activeAmount < 1 || topUpLoading}
-            className="w-full flex items-center justify-center gap-2 bg-brand-yellow text-brand-black font-bold py-3.5 rounded-xl text-sm hover:bg-brand-yellow-dark hover:shadow-lg transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => setShowGiftCard(true)}
+            className="w-full flex items-center justify-center gap-2 bg-white text-purple-700 font-bold py-3.5 rounded-xl text-sm border-2 border-purple-200 hover:border-purple-400 hover:bg-purple-50 transition-all"
           >
-            {topUpLoading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <>
-                <Plus className="w-4 h-4" />
-                Add {activeAmount > 0 ? formatCurrency(activeAmount) : "Money"}
-                {bonusAmount > 0 && ` + ${formatCurrency(bonusAmount)} bonus`}
-              </>
-            )}
+            <Gift className="w-4 h-4" />
+            Redeem Gift Card
           </button>
-        </div>
-      )}
+        )}
+
+        {showGiftCard && (
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-purple-200 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-bold text-purple-500 uppercase tracking-wider">GIFT CARD</p>
+                <h3 className="font-heading text-base font-bold text-brand-black">
+                  Enter Redeem Code
+                </h3>
+              </div>
+              <button
+                onClick={() => { setShowGiftCard(false); setGiftCardCode(""); }}
+                className="text-xs text-brand-gray-500 font-medium hover:text-brand-gray-700"
+              >
+                Cancel
+              </button>
+            </div>
+
+            <div className="flex items-center border-2 border-purple-200 rounded-xl focus-within:border-purple-400 transition-colors">
+              <div className="pl-3 pr-2">
+                <Gift className="w-4 h-4 text-purple-400" />
+              </div>
+              <input
+                type="text"
+                placeholder="Enter gift card code"
+                value={giftCardCode}
+                onChange={(e) => setGiftCardCode(e.target.value.toUpperCase())}
+                className="flex-1 px-2 py-3 text-sm bg-transparent outline-none placeholder:text-brand-gray-400 font-mono tracking-wider"
+                maxLength={20}
+              />
+            </div>
+
+            <button
+              onClick={handleRedeemGiftCard}
+              disabled={!giftCardCode.trim() || giftCardLoading}
+              className="w-full flex items-center justify-center gap-2 bg-purple-600 text-white font-bold py-3.5 rounded-xl text-sm hover:bg-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {giftCardLoading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  <Gift className="w-4 h-4" />
+                  Redeem
+                </>
+              )}
+            </button>
+          </div>
+        )}
 
         {/* Transaction History */}
         <div>
@@ -383,39 +461,65 @@ export default function WalletPage() {
               description="Your wallet transactions will appear here after you add money or make a purchase."
             />
           ) : (
-            <div className="space-y-2">
-              {transactions.map((tx) => {
-                const isCredit =
-                  tx.type === "topup" ||
-                  tx.type === "bonus" ||
-                  tx.type === "refund";
-                return (
-                  <div
-                    key={tx.id}
-                    className="bg-white rounded-xl p-4 flex items-center gap-3 shadow-sm border border-brand-gray-100"
-                  >
-                    <TransactionIcon type={tx.type} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-brand-black truncate">
-                        {tx.description}
-                      </p>
-                      <p className="text-xs text-brand-gray-400 mt-0.5">
-                        {formatDateTime(tx.created_at)}
+            <>
+              <div className="space-y-2">
+                {transactions.slice(txPage * TX_PAGE_SIZE, (txPage + 1) * TX_PAGE_SIZE).map((tx) => {
+                  const isCredit =
+                    tx.type === "topup" ||
+                    tx.type === "bonus" ||
+                    tx.type === "refund";
+                  return (
+                    <div
+                      key={tx.id}
+                      className="bg-white rounded-xl p-4 flex items-center gap-3 shadow-sm border border-brand-gray-100"
+                    >
+                      <TransactionIcon type={tx.type} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-brand-black truncate">
+                          {tx.description}
+                        </p>
+                        <p className="text-xs text-brand-gray-400 mt-0.5">
+                          {formatDateTime(tx.created_at)}
+                        </p>
+                      </div>
+                      <p
+                        className={cn(
+                          "text-sm font-bold shrink-0",
+                          isCredit ? "text-green-600" : "text-red-500"
+                        )}
+                      >
+                        {isCredit ? "+" : "-"}
+                        {formatCurrency(tx.amount)}
                       </p>
                     </div>
-                    <p
-                      className={cn(
-                        "text-sm font-bold shrink-0",
-                        isCredit ? "text-green-600" : "text-red-500"
-                      )}
+                  );
+                })}
+              </div>
+
+              {transactions.length > TX_PAGE_SIZE && (
+                <div className="flex items-center justify-between pt-3">
+                  <p className="text-xs text-brand-gray-400">
+                    {txPage * TX_PAGE_SIZE + 1}–{Math.min((txPage + 1) * TX_PAGE_SIZE, transactions.length)} of {transactions.length}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setTxPage(p => Math.max(0, p - 1))}
+                      disabled={txPage === 0}
+                      className="px-3 py-1.5 text-xs font-medium border border-brand-gray-200 rounded-lg disabled:opacity-40 hover:bg-brand-gray-50 transition-colors"
                     >
-                      {isCredit ? "+" : "-"}
-                      {formatCurrency(tx.amount)}
-                    </p>
+                      Prev
+                    </button>
+                    <button
+                      onClick={() => setTxPage(p => Math.min(Math.ceil(transactions.length / TX_PAGE_SIZE) - 1, p + 1))}
+                      disabled={(txPage + 1) * TX_PAGE_SIZE >= transactions.length}
+                      className="px-3 py-1.5 text-xs font-medium border border-brand-gray-200 rounded-lg disabled:opacity-40 hover:bg-brand-gray-50 transition-colors"
+                    >
+                      Next
+                    </button>
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

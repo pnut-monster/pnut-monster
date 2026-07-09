@@ -28,6 +28,7 @@ import { Spinner } from "@/components/ui/spinner";
 import type { Profile, Campaign } from "@/lib/supabase/types";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import type { Variants } from "framer-motion";
 
 interface ReferralCampaignConfig {
   referrer_bonus_points?: number;
@@ -56,22 +57,28 @@ interface ReferralStats {
   thisWeekReferrals: number;
 }
 
-const fadeUp = {
+const fadeUp: Variants = {
   hidden: { opacity: 0, y: 30 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
 };
 
-const scaleIn = {
-  hidden: { opacity: 0, scale: 0.8 },
-  visible: { opacity: 1, scale: 1, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] } },
-};
-
-const staggerContainer = {
+const staggerContainer: Variants = {
   hidden: {},
   visible: {
     transition: { staggerChildren: 0.08, delayChildren: 0.1 },
   },
 };
+
+const confettiTargets = Array.from({ length: 30 }, (_, i) => ({
+  x: `${((i * 37) % 100).toString()}vw`,
+  y: `${((i * 61) % 100).toString()}vh`,
+  rotate: (i * 47) % 360,
+}));
+
+const campaignSparkles = Array.from({ length: 20 }, (_, i) => ({
+  left: `${((i * 29 + 11) % 100).toString()}%`,
+  top: `${((i * 53 + 17) % 100).toString()}%`,
+}));
 
 export default function ReferralPage() {
   const router = useRouter();
@@ -93,7 +100,6 @@ export default function ReferralPage() {
   });
   const [copied, setCopied] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "history">("overview");
   const [showConfetti, setShowConfetti] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -135,18 +141,23 @@ export default function ReferralPage() {
         .order("created_at", { ascending: false });
 
       if (referredData) {
-        const userIds = referredData.map((u) => u.id);
+        const referredRows = (referredData ?? []) as Pick<
+          Profile,
+          "id" | "full_name" | "email" | "avatar_url" | "created_at"
+        >[];
+        const userIds = referredRows.map((u) => u.id);
         const { data: ordersData } = await supabase
           .from("orders")
           .select("user_id")
           .in("user_id", userIds)
-          .eq("status", "completed");
+          .eq("status", "picked_up");
 
+        const orderRows = (ordersData ?? []) as { user_id: string }[];
         const usersWithOrders = new Set(
-          ordersData?.map((o) => o.user_id) ?? []
+          orderRows.map((o) => o.user_id)
         );
 
-        const enrichedUsers: ReferredUser[] = referredData.map((u) => ({
+        const enrichedUsers: ReferredUser[] = referredRows.map((u) => ({
           ...u,
           hasOrdered: usersWithOrders.has(u.id),
         }));
@@ -305,7 +316,7 @@ export default function ReferralPage() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 pointer-events-none z-50 flex items-center justify-center"
           >
-            {Array.from({ length: 30 }).map((_, i) => (
+            {confettiTargets.map((target, i) => (
               <motion.div
                 key={i}
                 initial={{
@@ -315,10 +326,10 @@ export default function ReferralPage() {
                   rotate: 0,
                 }}
                 animate={{
-                  x: `${Math.random() * 100}vw`,
-                  y: `${Math.random() * 100}vh`,
+                  x: target.x,
+                  y: target.y,
                   scale: [0, 1, 0.5],
-                  rotate: Math.random() * 360,
+                  rotate: target.rotate,
                 }}
                 transition={{
                   duration: 2,
@@ -511,13 +522,13 @@ export default function ReferralPage() {
                 {/* Animated Background Pattern */}
                 <div className="absolute inset-0 opacity-20">
                   <div className="absolute top-0 left-0 w-full h-full">
-                    {Array.from({ length: 20 }).map((_, i) => (
+                    {campaignSparkles.map((sparkle, i) => (
                       <motion.div
                         key={i}
                         className="absolute w-2 h-2 bg-white rounded-full"
                         style={{
-                          left: `${Math.random() * 100}%`,
-                          top: `${Math.random() * 100}%`,
+                          left: sparkle.left,
+                          top: sparkle.top,
                         }}
                         animate={{
                           scale: [0, 1, 0],

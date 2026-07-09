@@ -1,15 +1,42 @@
 import withSerwistInit from "@serwist/next";
 
+const isDev = process.env.NODE_ENV === "development";
+
 const withSerwist = withSerwistInit({
   swSrc: "src/app/sw.ts",
   swDest: "public/sw.js",
-  disable: process.env.NODE_ENV === "development",
+  disable: isDev,
 });
 
 const nextConfig = {
+  ...(isDev ? { allowedDevOrigins: ["127.0.0.1", "10.0.0.8", "localhost"] } : {}),
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self)" },
+          ...(isDev
+            ? []
+            : [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }]),
+        ],
+      },
+    ];
+  },
+  async rewrites() {
+    if (!isDev) return [];
+    return [
+      {
+        source: "/supabase/:path*",
+        destination: "http://127.0.0.1:54331/:path*",
+      },
+    ];
+  },
   images: {
     remotePatterns: [
-      // AWS S3
       {
         protocol: "https" as const,
         hostname: "*.s3.amazonaws.com",
@@ -18,12 +45,10 @@ const nextConfig = {
         protocol: "https" as const,
         hostname: "*.s3.*.amazonaws.com",
       },
-      // CloudFront CDN
       {
         protocol: "https" as const,
         hostname: "*.cloudfront.net",
       },
-      // Custom CDN domain (update when configured)
       {
         protocol: "https" as const,
         hostname: "cdn.pnutmonster.com",
@@ -32,7 +57,6 @@ const nextConfig = {
         protocol: "https" as const,
         hostname: "assets.pnutmonster.com",
       },
-      // Supabase Storage (fallback/local dev)
       {
         protocol: "https" as const,
         hostname: "*.supabase.co",

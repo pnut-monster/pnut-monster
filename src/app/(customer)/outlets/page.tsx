@@ -97,11 +97,7 @@ export default function OutletsPage() {
   };
 
   const isOpen = (outlet: Outlet) => {
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    const currentTime = `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
-    return currentTime >= outlet.opens_at && currentTime <= outlet.closes_at;
+    return outlet.is_active && !outlet.is_manually_closed;
   };
 
   return (
@@ -176,9 +172,11 @@ export default function OutletsPage() {
                           <Clock className="h-3 w-3" />
                           {open ? "Open Now" : "Closed"}
                         </span>
-                        <span className="text-xs text-brand-gray-400">
-                          {outlet.opens_at.slice(0, 5)} - {outlet.closes_at.slice(0, 5)}
-                        </span>
+                        {!open && outlet.manual_close_reason && (
+                          <span className="text-xs text-brand-gray-400">
+                            {outlet.manual_close_reason}
+                          </span>
+                        )}
                       </div>
                     </div>
                     {outlet.distance !== null && (

@@ -70,45 +70,41 @@ export default function ProfileSetupPage() {
       let avatarUrl: string | null = null;
 
       if (avatarFile) {
-        const ext = avatarFile.name.split(".").pop();
-        const path = `avatars/${user.id}.${ext}`;
-        const { error: uploadError } = await supabase.storage
-          .from("avatars")
-          .upload(path, avatarFile, { upsert: true });
+        const formData = new FormData();
+        formData.append("file", avatarFile);
+        formData.append("folder", "avatars");
 
-        if (!uploadError) {
-          const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(path);
-          avatarUrl = publicUrl;
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          avatarUrl = uploadData.url;
         }
       }
 
-      // First check if profile exists
-      const { data: existingProfile, error: fetchError } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("id", user.id)
-        .single();
-
-      console.log("Existing profile check:", { existingProfile, fetchError, userId: user.id });
+      const profileData = {
+        full_name: fullName.trim(),
+        email: authEmail || null,
+        phone: cleanedPhone ? `+91${cleanedPhone}` : null,
+        date_of_birth: dob || null,
+        ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+      };
 
       const { error } = await supabase.from("profiles")
-        .update({
-          full_name: fullName.trim(),
-          email: authEmail || null,
-          phone: cleanedPhone ? `+91${cleanedPhone}` : null,
-          date_of_birth: dob || null,
-          avatar_url: avatarUrl,
-        })
-        .eq('id', user.id);
+        .update(profileData as never)
+        .eq("id", user.id);
 
       if (error) {
         console.error("Profile save error:", error);
-        console.error("Error details:", JSON.stringify(error, null, 2));
-        toast.error(`Failed to save profile: ${error.message}`);
+        toast.error(error.message || "Failed to save profile. Please try again.");
         return;
       }
 
       toast.success("Profile created! Welcome aboard!");
+      fetch("/api/email/welcome", { method: "POST" }).catch(() => {});
       router.replace("/");
     } catch (err) {
       console.error("Profile setup error:", err);

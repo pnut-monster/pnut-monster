@@ -26,7 +26,7 @@ const ACTIVE_STATUSES: Order["status"][] = [
   "ready",
 ];
 
-const PAST_STATUSES: Order["status"][] = ["picked_up", "cancelled"];
+const PAST_STATUSES: Order["status"][] = ["picked_up", "cancelled", "rejected"];
 
 const STATUS_BADGE_VARIANT: Record<string, "default" | "success" | "warning" | "danger" | "info"> = {
   pending: "warning",
@@ -35,6 +35,7 @@ const STATUS_BADGE_VARIANT: Record<string, "default" | "success" | "warning" | "
   ready: "success",
   picked_up: "default",
   cancelled: "danger",
+  rejected: "danger",
 };
 
 export default function OrderHistoryPage() {
@@ -258,9 +259,25 @@ export default function OrderHistoryPage() {
                 </span>
               </div>
 
+              {/* Refund status for rejected orders */}
+              {order.status === "rejected" && (
+                <div className="mt-3 pt-3 border-t border-brand-gray-100">
+                  {order.payment_status === "refunded" ? (
+                    <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2">
+                      <span className="font-semibold">Refunded {formatCurrency(order.total)}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-sm text-orange-700 bg-orange-50 rounded-lg px-3 py-2">
+                      <span className="font-semibold">Refund in process</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Reorder button for past orders */}
               {PAST_STATUSES.includes(order.status) &&
-                order.status !== "cancelled" && (
+                order.status !== "cancelled" &&
+                order.status !== "rejected" && (
                   <div className="mt-3 pt-3 border-t border-brand-gray-100">
                     <Button
                       size="sm"

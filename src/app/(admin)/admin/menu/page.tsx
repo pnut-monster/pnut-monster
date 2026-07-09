@@ -27,6 +27,7 @@ import {
   Sparkles,
   GripVertical,
 } from "lucide-react";
+import toast from "react-hot-toast";
 
 // ===================== TYPES =====================
 
@@ -120,6 +121,14 @@ const EMPTY_OPTION_FORM: OptionForm = {
   sort_order: "0",
 };
 
+const LEMON_INTENSITY_GROUP_NAME = "Lemon Intensity";
+const LEMON_INTENSITY_OPTIONS = [
+  { name: "No Lemon", sort_order: 1, is_default: false },
+  { name: "Light Lemon", sort_order: 2, is_default: false },
+  { name: "Regular Lemon", sort_order: 3, is_default: true },
+  { name: "Extra Lemon", sort_order: 4, is_default: false },
+];
+
 // ===================== SECTION TABS =====================
 const SECTION_TABS = [
   { label: "Items", value: "items" },
@@ -181,6 +190,7 @@ export default function AdminMenuPage() {
   const [editingOption, setEditingOption] = useState<CustomizationOption | null>(null);
   const [optionForm, setOptionForm] = useState<OptionForm>(EMPTY_OPTION_FORM);
   const [optionSaving, setOptionSaving] = useState(false);
+  const [lemonIntensitySaving, setLemonIntensitySaving] = useState(false);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [deleteGroupConfirm, setDeleteGroupConfirm] = useState<CustomizationGroup | null>(null);
   const [deleteOptionConfirm, setDeleteOptionConfirm] = useState<CustomizationOption | null>(null);
@@ -311,21 +321,11 @@ export default function AdminMenuPage() {
         const { error } = await supabase.from("menu_items").insert(payload as never);
         if (error) throw error;
       }
-    } catch {
-      console.warn("[admin/menu] Save item failed, updating local state");
-      if (editingItem) {
-        setItems((prev) => prev.map((i) => (i.id === editingItem.id ? { ...i, ...payload } : i)));
-      } else {
-        const newItem: MenuItem = {
-          ...payload,
-          id: `local-${Date.now()}`,
-          description: payload.description,
-          image_url: payload.image_url,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        setItems((prev) => [...prev, newItem]);
-      }
+    } catch (err) {
+      console.error("[admin/menu] Save item failed:", err);
+      toast.error("Could not save item");
+      setItemSaving(false);
+      return;
     }
 
     setItemSaving(false);
@@ -337,9 +337,11 @@ export default function AdminMenuPage() {
     try {
       const { error } = await supabase.from("menu_items").delete().eq("id", item.id);
       if (error) throw error;
-    } catch {
-      console.warn("[admin/menu] Delete item failed, updating local state");
-      setItems((prev) => prev.filter((i) => i.id !== item.id));
+    } catch (err) {
+      console.error("[admin/menu] Delete item failed:", err);
+      toast.error("Could not delete item");
+      setDeleteConfirmItem(null);
+      return;
     }
     setDeleteConfirmItem(null);
     fetchData();
@@ -347,12 +349,15 @@ export default function AdminMenuPage() {
 
   const toggleItemActive = async (item: MenuItem) => {
     try {
-      await supabase
+      const { error } = await supabase
         .from("menu_items")
         .update({ is_active: !item.is_active } as never)
         .eq("id", item.id);
-    } catch {
-      // update locally
+      if (error) throw error;
+    } catch (err) {
+      console.error("[admin/menu] Toggle active failed:", err);
+      toast.error("Could not update item");
+      return;
     }
     setItems((prev) =>
       prev.map((i) => (i.id === item.id ? { ...i, is_active: !i.is_active } : i))
@@ -361,12 +366,15 @@ export default function AdminMenuPage() {
 
   const toggleBestseller = async (item: MenuItem) => {
     try {
-      await supabase
+      const { error } = await supabase
         .from("menu_items")
         .update({ is_bestseller: !item.is_bestseller } as never)
         .eq("id", item.id);
-    } catch {
-      // update locally
+      if (error) throw error;
+    } catch (err) {
+      console.error("[admin/menu] Toggle bestseller failed:", err);
+      toast.error("Could not update item");
+      return;
     }
     setItems((prev) =>
       prev.map((i) => (i.id === item.id ? { ...i, is_bestseller: !i.is_bestseller } : i))
@@ -375,12 +383,15 @@ export default function AdminMenuPage() {
 
   const toggleItemNew = async (item: MenuItem) => {
     try {
-      await supabase
+      const { error } = await supabase
         .from("menu_items")
         .update({ is_new: !item.is_new } as never)
         .eq("id", item.id);
-    } catch {
-      // update locally
+      if (error) throw error;
+    } catch (err) {
+      console.error("[admin/menu] Toggle new failed:", err);
+      toast.error("Could not update item");
+      return;
     }
     setItems((prev) =>
       prev.map((i) => (i.id === item.id ? { ...i, is_new: !i.is_new } : i))
@@ -430,20 +441,11 @@ export default function AdminMenuPage() {
         const { error } = await supabase.from("menu_categories").insert(payload as never);
         if (error) throw error;
       }
-    } catch {
-      console.warn("[admin/menu] Save category failed, updating local state");
-      if (editingCat) {
-        setCategories((prev) => prev.map((c) => (c.id === editingCat.id ? { ...c, ...payload } : c)));
-      } else {
-        const newCat: MenuCategory = {
-          ...payload,
-          id: `local-${Date.now()}`,
-          description: payload.description,
-          image_url: payload.image_url,
-          created_at: new Date().toISOString(),
-        };
-        setCategories((prev) => [...prev, newCat]);
-      }
+    } catch (err) {
+      console.error("[admin/menu] Save category failed:", err);
+      toast.error("Could not save category");
+      setCatSaving(false);
+      return;
     }
 
     setCatSaving(false);
@@ -466,10 +468,11 @@ export default function AdminMenuPage() {
       }
       const { error } = await supabase.from("menu_categories").delete().eq("id", cat.id);
       if (error) throw error;
-    } catch {
-      console.warn("[admin/menu] Delete category failed, updating local state");
-      setSubcategories((prev) => prev.filter((s) => s.category_id !== cat.id));
-      setCategories((prev) => prev.filter((c) => c.id !== cat.id));
+    } catch (err) {
+      console.error("[admin/menu] Delete category failed:", err);
+      toast.error("Could not delete category");
+      setDeleteCatConfirm(null);
+      return;
     }
     setDeleteCatConfirm(null);
     fetchData();
@@ -477,12 +480,15 @@ export default function AdminMenuPage() {
 
   const toggleCatActive = async (cat: MenuCategory) => {
     try {
-      await supabase
+      const { error } = await supabase
         .from("menu_categories")
         .update({ is_active: !cat.is_active } as never)
         .eq("id", cat.id);
-    } catch {
-      // update locally
+      if (error) throw error;
+    } catch (err) {
+      console.error("[admin/menu] Toggle category failed:", err);
+      toast.error("Could not update category");
+      return;
     }
     setCategories((prev) =>
       prev.map((c) => (c.id === cat.id ? { ...c, is_active: !c.is_active } : c))
@@ -530,18 +536,11 @@ export default function AdminMenuPage() {
         const { error } = await supabase.from("menu_subcategories").insert(payload as never);
         if (error) throw error;
       }
-    } catch {
-      console.warn("[admin/menu] Save subcategory failed, updating local state");
-      if (editingSub) {
-        setSubcategories((prev) => prev.map((s) => (s.id === editingSub.id ? { ...s, ...payload } : s)));
-      } else {
-        const newSub: MenuSubcategory = {
-          ...payload,
-          id: `local-${Date.now()}`,
-          created_at: new Date().toISOString(),
-        };
-        setSubcategories((prev) => [...prev, newSub]);
-      }
+    } catch (err) {
+      console.error("[admin/menu] Save subcategory failed:", err);
+      toast.error("Could not save subcategory");
+      setSubSaving(false);
+      return;
     }
 
     setSubSaving(false);
@@ -559,9 +558,11 @@ export default function AdminMenuPage() {
     try {
       const { error } = await supabase.from("menu_subcategories").delete().eq("id", sub.id);
       if (error) throw error;
-    } catch {
-      console.warn("[admin/menu] Delete subcategory failed, updating local state");
-      setSubcategories((prev) => prev.filter((s) => s.id !== sub.id));
+    } catch (err) {
+      console.error("[admin/menu] Delete subcategory failed:", err);
+      toast.error("Could not delete subcategory");
+      setDeleteSubConfirm(null);
+      return;
     }
     setDeleteSubConfirm(null);
     fetchData();
@@ -637,14 +638,11 @@ export default function AdminMenuPage() {
         const { error } = await supabase.from("item_customization_groups").insert(payload as never);
         if (error) throw error;
       }
-    } catch {
-      console.warn("[admin/menu] Save group failed, updating local state");
-      if (editingGroup) {
-        setCustGroups((prev) => prev.map((g) => (g.id === editingGroup.id ? { ...g, ...payload } : g)));
-      } else {
-        const newGroup: CustomizationGroup = { ...payload, id: `local-${Date.now()}` };
-        setCustGroups((prev) => [...prev, newGroup]);
-      }
+    } catch (err) {
+      console.error("[admin/menu] Save group failed:", err);
+      toast.error("Could not save customization group");
+      setGroupSaving(false);
+      return;
     }
 
     setGroupSaving(false);
@@ -655,13 +653,15 @@ export default function AdminMenuPage() {
   const handleGroupDelete = async (group: CustomizationGroup) => {
     try {
       // Delete options first
-      await supabase.from("customization_options").delete().eq("group_id", group.id);
+      const { error: optionError } = await supabase.from("customization_options").delete().eq("group_id", group.id);
+      if (optionError) throw optionError;
       const { error } = await supabase.from("item_customization_groups").delete().eq("id", group.id);
       if (error) throw error;
-    } catch {
-      console.warn("[admin/menu] Delete group failed, updating local state");
-      setCustOptions((prev) => prev.filter((o) => o.group_id !== group.id));
-      setCustGroups((prev) => prev.filter((g) => g.id !== group.id));
+    } catch (err) {
+      console.error("[admin/menu] Delete group failed:", err);
+      toast.error("Could not delete customization group");
+      setDeleteGroupConfirm(null);
+      return;
     }
     setDeleteGroupConfirm(null);
     if (customizingItem) openCustomizations(customizingItem);
@@ -711,14 +711,11 @@ export default function AdminMenuPage() {
         const { error } = await supabase.from("customization_options").insert(payload as never);
         if (error) throw error;
       }
-    } catch {
-      console.warn("[admin/menu] Save option failed, updating local state");
-      if (editingOption) {
-        setCustOptions((prev) => prev.map((o) => (o.id === editingOption.id ? { ...o, ...payload } : o)));
-      } else {
-        const newOpt: CustomizationOption = { ...payload, id: `local-${Date.now()}` };
-        setCustOptions((prev) => [...prev, newOpt]);
-      }
+    } catch (err) {
+      console.error("[admin/menu] Save option failed:", err);
+      toast.error("Could not save customization option");
+      setOptionSaving(false);
+      return;
     }
 
     setOptionSaving(false);
@@ -730,12 +727,63 @@ export default function AdminMenuPage() {
     try {
       const { error } = await supabase.from("customization_options").delete().eq("id", option.id);
       if (error) throw error;
-    } catch {
-      console.warn("[admin/menu] Delete option failed, updating local state");
-      setCustOptions((prev) => prev.filter((o) => o.id !== option.id));
+    } catch (err) {
+      console.error("[admin/menu] Delete option failed:", err);
+      toast.error("Could not delete customization option");
+      setDeleteOptionConfirm(null);
+      return;
     }
     setDeleteOptionConfirm(null);
     if (customizingItem) openCustomizations(customizingItem);
+  };
+
+  const handleAddLemonIntensity = async () => {
+    if (!customizingItem || lemonIntensitySaving) return;
+    const hasLemonIntensity = custGroups.some(
+      (group) => group.name.trim().toLowerCase() === LEMON_INTENSITY_GROUP_NAME.toLowerCase()
+    );
+    if (hasLemonIntensity) return;
+
+    setLemonIntensitySaving(true);
+    const groupPayload = {
+      item_id: customizingItem.id,
+      name: LEMON_INTENSITY_GROUP_NAME,
+      type: "flavour" as const,
+      is_required: true,
+      min_select: 1,
+      max_select: 1,
+      sort_order: (custGroups.reduce((max, group) => Math.max(max, group.sort_order), 0) || 0) + 1,
+    };
+
+    try {
+      const { data: groupData, error: groupError } = await supabase
+        .from("item_customization_groups")
+        .insert(groupPayload as never)
+        .select("*")
+        .single();
+      if (groupError || !groupData) throw groupError ?? new Error("Failed to create lemon intensity group");
+
+      const group = groupData as CustomizationGroup;
+      const optionPayloads = LEMON_INTENSITY_OPTIONS.map((option) => ({
+        group_id: group.id,
+        name: option.name,
+        price: 0,
+        is_default: option.is_default,
+        is_active: true,
+        sort_order: option.sort_order,
+      }));
+
+      const { error: optionsError } = await supabase
+        .from("customization_options")
+        .insert(optionPayloads as never);
+      if (optionsError) throw optionsError;
+    } catch (err) {
+      console.error("[admin/menu] Add lemon intensity failed:", err);
+      toast.error("Could not add lemon intensity");
+    } finally {
+      setLemonIntensitySaving(false);
+      if (customizingItem) openCustomizations(customizingItem);
+    }
   };
 
   // ===================== RENDER =====================
@@ -1099,15 +1147,34 @@ export default function AdminMenuPage() {
             </div>
           ) : (
             <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+              {(() => {
+                const hasLemonIntensity = custGroups.some(
+                  (group) => group.name.trim().toLowerCase() === LEMON_INTENSITY_GROUP_NAME.toLowerCase()
+                );
+                return (
               <div className="flex items-center justify-between">
                 <p className="text-sm text-brand-gray-500">
                   {custGroups.length} group{custGroups.length !== 1 ? "s" : ""}
                 </p>
-                <Button onClick={openGroupAdd} size="sm">
-                  <Plus className="w-4 h-4" />
-                  Add Group
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={handleAddLemonIntensity}
+                    size="sm"
+                    variant="outline"
+                    loading={lemonIntensitySaving}
+                    disabled={hasLemonIntensity}
+                  >
+                    <Plus className="w-4 h-4" />
+                    Lemon Intensity
+                  </Button>
+                  <Button onClick={openGroupAdd} size="sm">
+                    <Plus className="w-4 h-4" />
+                    Add Group
+                  </Button>
+                </div>
               </div>
+                );
+              })()}
 
               {custGroups.length === 0 ? (
                 <p className="text-sm text-brand-gray-400 text-center py-6">

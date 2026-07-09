@@ -58,11 +58,12 @@ function generatePattern(code: string): boolean[][] {
 
 interface PickupCodeProps {
   orderNumber: string;
+  code?: string | null;
   size?: "sm" | "md" | "lg";
 }
 
-export function PickupCode({ orderNumber, size = "md" }: PickupCodeProps) {
-  const code = generatePickupCode(orderNumber);
+export function PickupCode({ orderNumber, code: providedCode, size = "md" }: PickupCodeProps) {
+  const code = providedCode ?? generatePickupCode(orderNumber);
   const pattern = generatePattern(code);
 
   const cellSize = size === "sm" ? "w-2 h-2" : size === "lg" ? "w-4 h-4" : "w-3 h-3";
@@ -106,23 +107,25 @@ export function PickupCode({ orderNumber, size = "md" }: PickupCodeProps) {
 
 interface PickupCodeVerifierProps {
   orderNumber: string;
-  onVerified: () => void;
+  code?: string | null;
+  onVerified: (code: string) => void;
   onCancel?: () => void;
 }
 
 export function PickupCodeVerifier({
   orderNumber,
+  code: providedCode,
   onVerified,
   onCancel,
 }: PickupCodeVerifierProps) {
   const [input, setInput] = useState("");
   const [error, setError] = useState(false);
-  const expectedCode = generatePickupCode(orderNumber);
+  const expectedCode = providedCode ?? generatePickupCode(orderNumber);
 
   function handleVerify() {
     if (input === expectedCode) {
       setError(false);
-      onVerified();
+      onVerified(input);
     } else {
       setError(true);
     }
@@ -181,18 +184,6 @@ export function PickupCodeVerifier({
           Verify Code
         </button>
       </div>
-
-      {/* Scan QR placeholder */}
-      <button
-        type="button"
-        className="mt-1 text-sm text-brand-green font-medium hover:underline"
-        onClick={() => {
-          // Placeholder — in production would open camera/scanner
-          alert(`QR would decode to: ${expectedCode}`);
-        }}
-      >
-        Or scan QR code
-      </button>
     </div>
   );
 }

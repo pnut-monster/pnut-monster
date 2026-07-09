@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Check, Clock, ShoppingBag } from "lucide-react";
+import { Check, Clock, ShoppingBag, XCircle, CheckCircle } from "lucide-react";
 import { Button, Card, Spinner } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils/helpers";
@@ -19,9 +19,9 @@ export default function OrderConfirmationPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchOrder() {
-      const supabase = createClient();
+    const supabase = createClient();
 
+    async function fetchOrder() {
       const { data: orderData } = await supabase
         .from("orders")
         .select("*")
@@ -46,6 +46,22 @@ export default function OrderConfirmationPage() {
     }
 
     fetchOrder();
+
+    const channel = supabase
+      .channel(`order-confirmation-${orderId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "orders", filter: `id=eq.${orderId}` },
+        (payload) => {
+          const updated = payload.new as Order;
+          setOrder(updated);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [orderId]);
 
   if (loading) {
@@ -70,6 +86,11 @@ export default function OrderConfirmationPage() {
     );
   }
 
+  const isAccepted = order.status === "confirmed" || order.status === "preparing" || order.status === "ready" || order.status === "picked_up";
+  const isRejected = order.status === "rejected";
+  const isPending = order.status === "pending";
+  const isPickedUp = order.status === "picked_up";
+
   return (
     <div className="min-h-screen bg-brand-cream pb-8">
       {/* Success Animation */}
@@ -83,7 +104,9 @@ export default function OrderConfirmationPage() {
             damping: 20,
             delay: 0.1,
           }}
-          className="w-20 h-20 rounded-full bg-brand-green flex items-center justify-center mb-6"
+          className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 ${
+            isRejected ? "bg-red-500" : isAccepted ? "bg-brand-green" : "bg-brand-green"
+          }`}
         >
           <motion.div
             initial={{ scale: 0 }}
@@ -95,7 +118,11 @@ export default function OrderConfirmationPage() {
               delay: 0.4,
             }}
           >
-            <Check className="h-10 w-10 text-white" strokeWidth={3} />
+            {isRejected ? (
+              <XCircle className="h-10 w-10 text-white" strokeWidth={2.5} />
+            ) : (
+              <Check className="h-10 w-10 text-white" strokeWidth={3} />
+            )}
           </motion.div>
         </motion.div>
 
@@ -106,13 +133,82 @@ export default function OrderConfirmationPage() {
           className="text-center"
         >
           <h1 className="text-2xl font-bold font-[family-name:var(--font-heading)] text-brand-black mb-1">
-            Order Placed!
+            {isRejected ? "Order Rejected" : isPickedUp ? "Order Picked Up Successfully!" : isAccepted ? "Order Accepted!" : "Order Placed!"}
           </h1>
           <p className="text-brand-gray-600 text-sm">
-            Your order has been received
+            {isRejected
+              ? "Your order was rejected by the outlet"
+              : isPickedUp
+              ? "Your order has been picked up successfully"
+              : isAccepted
+              ? "Your order has been accepted and is being processed"
+              : "Waiting for outlet to accept your order"}
           </p>
         </motion.div>
       </div>
+
+      {/* Status Banner */}
+      {!isPending && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="px-4 mb-4 space-y-3"
+        >
+          <div
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl ${
+              isRejected
+                ? "bg-red-50 border border-red-200"
+                : "bg-green-50 border border-green-200"
+            }`}
+          >
+            {isRejected ? (
+              <XCircle className="w-5 h-5 text-red-600 shrink-0" />
+            ) : (
+              <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
+            )}
+            <p
+              className={`text-sm font-semibold ${
+                isRejected ? "text-red-700" : "text-green-700"
+              }`}
+            >
+              {isRejected
+                ? "Order Rejected — The outlet could not fulfill your order."
+                : isPickedUp
+                ? "Order Picked Up Successfully!"
+                : "Order Accepted — Your order is being prepared!"}
+            </p>
+          </div>
+
+          {isRejected && (
+            <div
+              className={`px-4 py-3 rounded-xl ${
+                order.payment_status === "refunded"
+                  ? "bg-green-50 border border-green-200"
+                  : "bg-orange-50 border border-orange-200"
+              }`}
+            >
+              {order.payment_status === "refunded" ? (
+                <p className="text-sm font-semibold text-green-700">
+                  Your refund of {formatCurrency(order.total)} has been processed.
+                  {order.wallet_used > 0 && (
+                    <span className="block text-xs font-normal text-green-600 mt-1">
+                      {formatCurrency(order.wallet_used)} refunded to wallet
+                      {order.total - order.wallet_used > 0 && (
+                        <> &middot; {formatCurrency(order.total - order.wallet_used)} refunded via {order.payment_method === "split" ? "online" : order.payment_method}</>
+                      )}
+                    </span>
+                  )}
+                </p>
+              ) : (
+                <p className="text-sm font-semibold text-orange-700">
+                  Your refund is being processed. The amount will be returned to your original payment method shortly.
+                </p>
+              )}
+            </div>
+          )}
+        </motion.div>
+      )}
 
       <motion.div
         initial={{ opacity: 0, y: 30 }}
@@ -128,12 +224,22 @@ export default function OrderConfirmationPage() {
           <p className="text-2xl font-bold font-[family-name:var(--font-heading)] text-brand-black">
             {order.order_number}
           </p>
-          <div className="flex items-center justify-center gap-1.5 mt-3 text-brand-yellow-dark">
-            <Clock className="h-4 w-4" />
-            <span className="text-sm font-semibold">
-              Estimated ready in 15-20 mins
-            </span>
-          </div>
+          {isPending && (
+            <div className="flex items-center justify-center gap-1.5 mt-3 text-brand-yellow-dark">
+              <Clock className="h-4 w-4" />
+              <span className="text-sm font-semibold">
+                Waiting for outlet to confirm
+              </span>
+            </div>
+          )}
+          {isAccepted && !isPickedUp && (
+            <div className="flex items-center justify-center gap-1.5 mt-3 text-brand-green-dark">
+              <Clock className="h-4 w-4" />
+              <span className="text-sm font-semibold">
+                Estimated ready in 15-20 mins
+              </span>
+            </div>
+          )}
         </Card>
 
         {/* Order Items */}

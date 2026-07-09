@@ -19,6 +19,7 @@ import {
   DeliveryCode,
   DeliveryCodeVerifier,
 } from "@/components/restaurant/delivery-code";
+import toast from "react-hot-toast";
 
 type OrderStatus = "pending" | "confirmed" | "preparing" | "ready";
 
@@ -52,81 +53,10 @@ export default function RestaurantOrdersPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const autoAcceptRef = useRef(false);
 
-  useEffect(() => {
-    const savedAutoAccept = localStorage.getItem("pnut_auto_accept");
-    if (savedAutoAccept === "true") {
-      setAutoAccept(true);
-      autoAcceptRef.current = true;
-    }
-
-    const savedSound = localStorage.getItem("pnut_order_sound");
-    if (savedSound === "false") setSoundEnabled(false);
-
-    loadOrders();
-  }, []);
-
-  // Set up realtime subscription
-  useEffect(() => {
-    const supabase = createClient();
-    const outletId = localStorage.getItem("pnut_selected_outlet");
-
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-
-    try {
-      channel = supabase
-        .channel("restaurant-orders")
-        .on(
-          "postgres_changes" as never,
-          {
-            event: "*",
-            schema: "public",
-            table: "orders",
-            filter: outletId ? `outlet_id=eq.${outletId}` : undefined,
-          } as never,
-          (payload: { eventType: string; new: Order }) => {
-            if (payload.eventType === "INSERT") {
-              // New order — play sound and reload
-              playNotificationSound();
-              // Auto-accept if enabled
-              if (autoAcceptRef.current && payload.new.status === "pending") {
-                const sb = createClient();
-                sb.from("orders")
-                  .update({ status: "confirmed" } as never)
-                  .eq("id", payload.new.id as never)
-                  .then(() => loadOrders());
-              } else {
-                loadOrders();
-              }
-            } else if (payload.eventType === "UPDATE") {
-              // Status changed — update in place
-              setOrders((prev) =>
-                prev.map((o) =>
-                  o.id === payload.new.id
-                    ? { ...o, ...payload.new }
-                    : o
-                )
-              );
-            }
-          }
-        )
-        .subscribe();
-    } catch {
-      // Realtime not available in dev — that's fine
-    }
-
-    return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const playNotificationSound = useCallback(() => {
     if (!soundEnabled) return;
     try {
       if (!audioRef.current) {
-        // Create a simple beep using AudioContext
         const ctx = new AudioContext();
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -170,15 +100,15 @@ export default function RestaurantOrdersPage() {
         customer_name: "Customer",
       }));
 
-      // Auto-accept pending orders if enabled
       if (autoAcceptRef.current) {
         const pendingOrders = queue.filter((o) => o.status === "pending");
         if (pendingOrders.length > 0) {
           for (const pending of pendingOrders) {
-            await supabase
-              .from("orders")
-              .update({ status: "confirmed" } as never)
-              .eq("id", pending.id as never);
+            const { error } = await supabase.rpc("update_order_status" as never, {
+              p_order_id: pending.id,
+              p_status: "confirmed",
+            } as never);
+            if (error) throw error;
             pending.status = "confirmed";
           }
         }
@@ -192,6 +122,80 @@ export default function RestaurantOrdersPage() {
     }
   }, []);
 
+  useEffect(() => {
+    const savedAutoAccept = localStorage.getItem("pnut_auto_accept");
+    if (savedAutoAccept === "true") {
+      setAutoAccept(true);
+      autoAcceptRef.current = true;
+    }
+
+    const savedSound = localStorage.getItem("pnut_order_sound");
+    if (savedSound === "false") setSoundEnabled(false);
+
+    loadOrders();
+  }, [loadOrders]);
+
+  // Set up realtime subscription
+  useEffect(() => {
+    const supabase = createClient();
+    const outletId = localStorage.getItem("pnut_selected_outlet");
+
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    try {
+      channel = supabase
+        .channel("restaurant-orders")
+        .on(
+          "postgres_changes" as never,
+          {
+            event: "*",
+            schema: "public",
+            table: "orders",
+            filter: outletId ? `outlet_id=eq.${outletId}` : undefined,
+          } as never,
+          (payload: { eventType: string; new: Order }) => {
+            if (payload.eventType === "INSERT") {
+              playNotificationSound();
+              if (autoAcceptRef.current && payload.new.status === "pending") {
+                const sb = createClient();
+                sb.rpc("update_order_status" as never, {
+                  p_order_id: payload.new.id,
+                  p_status: "confirmed",
+                } as never)
+                  .then(({ error }) => {
+                    if (error) {
+                      console.error("[Restaurant Orders] Auto-accept failed:", error);
+                      toast.error("Could not auto-accept order");
+                    }
+                    loadOrders();
+                  });
+              } else {
+                loadOrders();
+              }
+            } else if (payload.eventType === "UPDATE") {
+              setOrders((prev) =>
+                prev.map((o) =>
+                  o.id === payload.new.id
+                    ? { ...o, ...payload.new }
+                    : o
+                )
+              );
+            }
+          }
+        )
+        .subscribe();
+    } catch {
+      // Realtime not available in dev
+    }
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Poll every 15 seconds as fallback for realtime
   useEffect(() => {
     const interval = setInterval(loadOrders, 15000);
@@ -200,61 +204,75 @@ export default function RestaurantOrdersPage() {
 
   async function updateOrderStatus(
     orderId: string,
-    newStatus: "confirmed" | "preparing" | "ready" | "picked_up"
+    newStatus: "confirmed" | "preparing" | "ready"
   ) {
     const supabase = createClient();
 
     try {
-      const { error } = await supabase
-        .from("orders")
-        .update({ status: newStatus } as never)
-        .eq("id", orderId as never);
+      const { error } = await supabase.rpc("update_order_status" as never, {
+        p_order_id: orderId,
+        p_status: newStatus,
+      } as never);
 
       if (error) throw error;
     } catch {
       console.error("[Restaurant Orders] Failed to update status");
+      toast.error("Could not update order status");
+      return;
     }
 
-    // Update locally regardless
     setOrders((prev) =>
       prev.map((o) =>
         o.id === orderId ? { ...o, status: newStatus as Order["status"] } : o
       )
     );
 
-    // If completed, remove from active queue after a brief delay
-    if (newStatus === "picked_up") {
-      setTimeout(() => {
-        setOrders((prev) => prev.filter((o) => o.id !== orderId));
-      }, 500);
+  }
+
+  async function completeOrder(orderId: string, code: string) {
+    const supabase = createClient();
+
+    try {
+      const { error } = await supabase.rpc("complete_order_with_pickup_code" as never, {
+        p_order_id: orderId,
+        p_code: code,
+      } as never);
+      if (error) throw error;
+    } catch (err) {
+      console.error("[Restaurant Orders] Failed to complete order:", err);
+      toast.error(err instanceof Error ? err.message : "Could not complete order");
+      return;
     }
+
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === orderId ? { ...o, status: "picked_up" as Order["status"] } : o
+      )
+    );
+
+    setTimeout(() => {
+      setOrders((prev) => prev.filter((o) => o.id !== orderId));
+    }, 500);
   }
 
   async function rejectOrder(orderId: string) {
     const supabase = createClient();
 
     try {
-      const { data, error } = await supabase.rpc("reject_order_with_refund" as never, {
+      const { data, error } = await supabase.rpc("reject_and_refund_order" as never, {
         p_order_id: orderId,
       } as never);
 
       if (error) throw error;
 
-      const result = data as { refunded: number } | null;
-      if (result && result.refunded > 0) {
-        alert(`Order rejected. ₹${result.refunded} refunded to customer wallet.`);
+      const result = data as { wallet_refunded: number } | null;
+      if (result && result.wallet_refunded > 0) {
+        alert(`Order rejected. ₹${result.wallet_refunded} refunded to customer wallet.`);
       }
     } catch (err) {
       console.error("[Restaurant Orders] Failed to reject order:", err);
-      // Fallback: just cancel without refund
-      try {
-        await supabase
-          .from("orders")
-          .update({ status: "cancelled" } as never)
-          .eq("id", orderId as never);
-      } catch {
-        console.error("[Restaurant Orders] Fallback cancel also failed");
-      }
+      toast.error("Could not reject order");
+      return;
     }
 
     setOrders((prev) => prev.filter((o) => o.id !== orderId));
@@ -390,7 +408,7 @@ export default function RestaurantOrdersPage() {
               onReject={() => rejectOrder(order.id)}
               onStartPreparing={() => updateOrderStatus(order.id, "preparing")}
               onMarkReady={() => updateOrderStatus(order.id, "ready")}
-              onComplete={() => updateOrderStatus(order.id, "picked_up")}
+              onComplete={(code) => completeOrder(order.id, code)}
               isVerifying={verifyingOrderId === order.id}
               onStartVerify={() => setVerifyingOrderId(order.id)}
               onCancelVerify={() => setVerifyingOrderId(null)}
@@ -422,7 +440,7 @@ function OrderCard({
   onReject: () => void;
   onStartPreparing: () => void;
   onMarkReady: () => void;
-  onComplete: () => void;
+  onComplete: (code: string) => void;
   isVerifying: boolean;
   onStartVerify: () => void;
   onCancelVerify: () => void;
@@ -455,18 +473,36 @@ function OrderCard({
         </div>
 
         {/* Items */}
-        <div className="space-y-1.5 mb-3">
-          {order.items.map((item) => (
-            <div key={item.id} className="flex justify-between text-sm">
-              <span className="text-brand-gray-700">
-                <span className="font-semibold text-brand-black">{item.quantity}x</span>{" "}
-                {item.item_name}
-              </span>
-              <span className="text-brand-gray-500 shrink-0 ml-2">
-                {formatCurrency(item.total_price)}
-              </span>
-            </div>
-          ))}
+        <div className="space-y-2 mb-3">
+          {order.items.map((item) => {
+            const customizations = (Array.isArray(item.customizations) ? item.customizations : []) as {
+              group_name: string;
+              options: { name: string; price: number }[];
+            }[];
+            return (
+              <div key={item.id}>
+                <div className="flex justify-between text-sm">
+                  <span className="text-brand-gray-700">
+                    <span className="font-semibold text-brand-black">{item.quantity}x</span>{" "}
+                    {item.item_name}
+                  </span>
+                  <span className="text-brand-gray-500 shrink-0 ml-2">
+                    {formatCurrency(item.total_price)}
+                  </span>
+                </div>
+                {customizations.length > 0 && (
+                  <div className="ml-6 mt-0.5 space-y-0.5">
+                    {customizations.map((group) => (
+                      <p key={group.group_name} className="text-xs text-brand-gray-500">
+                        <span className="font-medium text-brand-gray-600">{group.group_name}:</span>{" "}
+                        {group.options.map((opt) => opt.name + (opt.price > 0 ? ` (+${formatCurrency(opt.price)})` : "")).join(", ")}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {/* Special notes */}
@@ -489,7 +525,7 @@ function OrderCard({
         {/* Delivery Code (for ready orders) */}
         {order.status === "ready" && !isVerifying && (
           <div className="mt-3 pt-3 border-t border-brand-gray-100">
-            <DeliveryCode orderNumber={order.order_number} size="sm" />
+            <DeliveryCode orderNumber={order.order_number} code={order.delivery_code} size="sm" />
           </div>
         )}
 
@@ -498,6 +534,7 @@ function OrderCard({
           <div className="mt-3 pt-3 border-t border-brand-gray-100">
             <DeliveryCodeVerifier
               orderNumber={order.order_number}
+              code={order.delivery_code}
               onVerified={onComplete}
               onCancel={onCancelVerify}
             />

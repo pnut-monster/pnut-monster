@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  User,
   MapPin,
   Bell,
   Gift,
@@ -128,7 +127,7 @@ export default function ProfilePage() {
     } finally {
       setLoading(false);
     }
-  }, [supabase, router]);
+  }, [supabase]);
 
   useEffect(() => {
     fetchData();

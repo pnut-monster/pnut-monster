@@ -10,26 +10,43 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import type { Outlet } from "@/lib/supabase/types";
+import type { Outlet, OutletSettings as DbOutletSettings } from "@/lib/supabase/types";
+import toast from "react-hot-toast";
 
-interface OutletSettings {
+interface RestaurantSettings {
   autoAccept: boolean;
   estimatedPrepTime: number; // minutes
   maxConcurrentOrders: number;
   soundNotifications: boolean;
 }
 
-const DEFAULT_SETTINGS: OutletSettings = {
+const DEFAULT_SETTINGS: RestaurantSettings = {
   autoAccept: false,
   estimatedPrepTime: 20,
   maxConcurrentOrders: 15,
   soundNotifications: true,
 };
 
+function mapDbSettings(row: DbOutletSettings): RestaurantSettings {
+  return {
+    autoAccept: row.auto_accept_orders,
+    estimatedPrepTime: row.estimated_prep_time,
+    maxConcurrentOrders: row.max_concurrent_orders,
+    soundNotifications: row.new_order_sound,
+  };
+}
+
+function persistLocalSettings(settings: RestaurantSettings) {
+  localStorage.setItem("pnut_outlet_settings", JSON.stringify(settings));
+  localStorage.setItem("pnut_auto_accept", String(settings.autoAccept));
+  localStorage.setItem("pnut_order_sound", String(settings.soundNotifications));
+}
+
 export default function RestaurantSettingsPage() {
   const [outlet, setOutlet] = useState<Outlet | null>(null);
-  const [settings, setSettings] = useState<OutletSettings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<RestaurantSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -40,11 +57,13 @@ export default function RestaurantSettingsPage() {
     const supabase = createClient();
     const outletId = localStorage.getItem("pnut_selected_outlet");
 
-    // Load saved settings from localStorage
+    let localSettings = DEFAULT_SETTINGS;
+
+    // Load cached settings from localStorage for compatibility with order screens.
     const savedSettings = localStorage.getItem("pnut_outlet_settings");
     if (savedSettings) {
       try {
-        setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(savedSettings) });
+        localSettings = { ...localSettings, ...JSON.parse(savedSettings) };
       } catch {
         // Ignore parse errors
       }
@@ -54,39 +73,76 @@ export default function RestaurantSettingsPage() {
     const autoAccept = localStorage.getItem("pnut_auto_accept");
     const sound = localStorage.getItem("pnut_order_sound");
     if (autoAccept !== null) {
-      setSettings((prev) => ({ ...prev, autoAccept: autoAccept === "true" }));
+      localSettings = { ...localSettings, autoAccept: autoAccept === "true" };
     }
     if (sound !== null) {
-      setSettings((prev) => ({ ...prev, soundNotifications: sound !== "false" }));
+      localSettings = { ...localSettings, soundNotifications: sound !== "false" };
     }
+    setSettings(localSettings);
 
     try {
       if (!outletId) throw new Error("No outlet selected");
 
-      const { data, error } = await supabase
+      const { data: outletData, error: outletError } = await supabase
         .from("outlets")
         .select("*")
         .eq("id", outletId)
         .single();
 
-      if (error) throw error;
-      setOutlet(data as Outlet);
-      setLoading(false);
-      return;
+      if (outletError) throw outletError;
+      setOutlet(outletData as Outlet);
+
+      const { data: settingsData, error: settingsError } = await supabase
+        .from("outlet_settings" as never)
+        .select("*")
+        .eq("outlet_id", outletId as never)
+        .maybeSingle();
+
+      if (settingsError) throw settingsError;
+
+      if (settingsData) {
+        const nextSettings = mapDbSettings(settingsData as DbOutletSettings);
+        setSettings(nextSettings);
+        persistLocalSettings(nextSettings);
+      }
     } catch (err) {
       console.error("Failed to fetch outlet settings:", err);
+    } finally {
       setLoading(false);
     }
   }
 
-  function handleSave() {
-    // Persist to localStorage
-    localStorage.setItem("pnut_outlet_settings", JSON.stringify(settings));
-    localStorage.setItem("pnut_auto_accept", String(settings.autoAccept));
-    localStorage.setItem("pnut_order_sound", String(settings.soundNotifications));
+  async function handleSave() {
+    if (!outlet?.id) {
+      toast.error("Select an outlet before saving settings");
+      return;
+    }
 
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setSaving(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("outlet_settings" as never)
+        .update({
+          auto_accept_orders: settings.autoAccept,
+          estimated_prep_time: settings.estimatedPrepTime,
+          max_concurrent_orders: settings.maxConcurrentOrders,
+          new_order_sound: settings.soundNotifications,
+        } as never)
+        .eq("outlet_id", outlet.id as never);
+
+      if (error) throw error;
+
+      persistLocalSettings(settings);
+      setSaved(true);
+      toast.success("Settings saved");
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      console.error("Failed to save outlet settings:", err);
+      toast.error("Could not save settings");
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (loading) {
@@ -300,13 +356,19 @@ export default function RestaurantSettingsPage() {
       <button
         type="button"
         onClick={handleSave}
+        disabled={saving}
         className={`w-full py-3.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-colors ${
           saved
             ? "bg-brand-green text-white"
             : "bg-brand-green text-white hover:bg-brand-green-dark"
-        }`}
+        } disabled:opacity-60 disabled:cursor-not-allowed`}
       >
-        {saved ? (
+        {saving ? (
+          <>
+            <Save className="w-5 h-5" />
+            Saving...
+          </>
+        ) : saved ? (
           <>
             <CheckCircle2 className="w-5 h-5" />
             Settings Saved

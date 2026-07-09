@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Mail, Lock, ArrowRight, Loader2, Eye, EyeOff, KeyRound } from "lucide-react";
@@ -11,14 +11,24 @@ type AuthMethod = "password" | "otp";
 
 export default function LoginPage() {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [method, setMethod] = useState<AuthMethod>("password");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [otp, setOtp] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const handleAuthUnavailable = () => {
+    toast.error("Auth service is unreachable. Start local Supabase and try again.");
+  };
 
   const handlePasswordSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +43,7 @@ export default function LoginPage() {
       toast.success("Welcome back!");
       router.replace("/");
     } catch {
-      toast.error("Something went wrong. Please try again.");
+      handleAuthUnavailable();
     } finally {
       setLoading(false);
     }
@@ -54,7 +64,7 @@ export default function LoginPage() {
       setOtpSent(true);
       toast.success("OTP sent to your email!");
     } catch {
-      toast.error("Something went wrong. Please try again.");
+      handleAuthUnavailable();
     } finally {
       setLoading(false);
     }
@@ -63,6 +73,7 @@ export default function LoginPage() {
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!otp.trim()) { toast.error("Please enter the OTP"); return; }
+    if (otp.length !== 6) { toast.error("OTP must be 6 digits"); return; }
 
     setLoading(true);
     try {
@@ -72,10 +83,30 @@ export default function LoginPage() {
         token: otp.trim(),
         type: "email",
       });
-      if (error) { toast.error(error.message); return; }
+      if (error) {
+        if (error.message.toLowerCase().includes("expired")) {
+          toast.error("OTP has expired. Please request a new one.");
+        } else {
+          toast.error("Invalid or wrong OTP. Please try again.");
+        }
+        return;
+      }
 
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        const code = referralCode.trim();
+        if (code) {
+          const { data: referralResult, error: referralError } = await supabase.rpc(
+            "apply_referral_code" as never,
+            { p_referral_code: code } as never
+          );
+          const result = referralResult as { success?: boolean; message?: string } | null;
+
+          if (referralError || result?.success === false) {
+            toast.error(referralError?.message ?? result?.message ?? "Could not apply referral code");
+          }
+        }
+
         const { data: profile } = await supabase
           .from("profiles")
           .select("full_name")
@@ -87,7 +118,7 @@ export default function LoginPage() {
       toast.success("Welcome back!");
       router.replace("/");
     } catch {
-      toast.error("Verification failed. Please try again.");
+      handleAuthUnavailable();
     } finally {
       setLoading(false);
     }
@@ -102,7 +133,7 @@ export default function LoginPage() {
       });
       if (error) toast.error(error.message);
     } catch {
-      toast.error("Something went wrong. Please try again.");
+      handleAuthUnavailable();
     }
   };
 
@@ -112,6 +143,10 @@ export default function LoginPage() {
     setOtp("");
     setPassword("");
   };
+
+  if (!mounted) {
+    return <div className="min-h-dvh bg-[#FAFBFC]" />;
+  }
 
   return (
     <div className="min-h-dvh bg-[#FAFBFC] flex flex-col">
@@ -213,6 +248,25 @@ export default function LoginPage() {
         {method === "otp" && !otpSent && (
           <form onSubmit={handleSendOtp} className="space-y-4" suppressHydrationWarning>
             <p className="text-xs text-brand-gray-400">We&apos;ll send a one-time code to your email</p>
+            <div>
+              <label htmlFor="referralCode" className="block text-xs font-bold text-brand-gray-500 uppercase tracking-wider mb-2">
+                Referral Code <span className="normal-case tracking-normal font-medium text-brand-gray-400">(optional)</span>
+              </label>
+              <div className="flex items-center border border-brand-gray-200 rounded-xl focus-within:border-brand-yellow transition-colors bg-white" suppressHydrationWarning>
+                <div className="flex items-center pl-3 pr-2">
+                  <KeyRound className="w-4 h-4 text-brand-gray-400" />
+                </div>
+                <input
+                  id="referralCode"
+                  type="text"
+                  placeholder="Enter referral code"
+                  value={referralCode}
+                  onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                  className="flex-1 px-2 py-3 text-sm bg-transparent outline-none placeholder:text-brand-gray-400 uppercase"
+                  autoComplete="off"
+                />
+              </div>
+            </div>
             <button
               type="submit"
               disabled={loading || !email.trim()}
@@ -239,10 +293,11 @@ export default function LoginPage() {
                   id="otp"
                   type="text"
                   inputMode="numeric"
-                  placeholder="Enter code from email"
+                  maxLength={6}
+                  placeholder="000000"
                   value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-                  className="flex-1 px-2 py-3 text-sm bg-transparent outline-none placeholder:text-brand-gray-400 tracking-widest font-semibold"
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  className="flex-1 px-2 py-3 text-lg bg-transparent outline-none placeholder:text-brand-gray-400 tracking-[0.4em] font-bold text-center"
                   autoComplete="one-time-code"
                   autoFocus
                 />
@@ -250,7 +305,7 @@ export default function LoginPage() {
             </div>
             <button
               type="submit"
-              disabled={loading || !otp.trim()}
+              disabled={loading || otp.length !== 6}
               className="w-full flex items-center justify-center gap-2 bg-brand-yellow text-brand-black font-bold py-3.5 rounded-xl text-sm hover:bg-brand-yellow-dark hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
             >
               {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Verify & Sign In <ArrowRight className="w-4 h-4" /></>}

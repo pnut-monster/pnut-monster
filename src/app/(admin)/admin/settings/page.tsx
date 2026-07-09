@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { APP_NAME, TAX_RATE, PACKAGING_CHARGE } from "@/lib/utils/constants";
-import { Input, Button } from "@/components/ui";
+import { useState, useEffect } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { APP_NAME } from "@/lib/utils/constants";
+import { Input, Button, Spinner } from "@/components/ui";
 import {
   Settings,
   Percent,
@@ -10,19 +11,75 @@ import {
   Info,
   Save,
 } from "lucide-react";
+import toast from "react-hot-toast";
 
 export default function AdminSettingsPage() {
-  const [taxRate, setTaxRate] = useState(String(TAX_RATE * 100));
-  const [packagingCharge, setPackagingCharge] = useState(
-    String(PACKAGING_CHARGE)
-  );
-  const [saved, setSaved] = useState(false);
+  const [taxRate, setTaxRate] = useState("");
+  const [packagingCharge, setPackagingCharge] = useState("");
+  const [packagingMode, setPackagingMode] = useState<"per_order" | "per_item">("per_order");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const supabase = createClient();
 
-  const handleSave = () => {
-    // Placeholder: In the future this would write to a settings table in Supabase
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  useEffect(() => {
+    async function loadSettings() {
+      const { data } = await supabase
+        .from("app_settings")
+        .select("key, value")
+        .in("key", ["tax_rate", "packaging_charge", "packaging_mode"]);
+      if (data) {
+        for (const row of data as { key: string; value: string }[]) {
+          if (row.key === "tax_rate") setTaxRate(String(parseFloat(row.value) * 100));
+          if (row.key === "packaging_charge") setPackagingCharge(row.value);
+          if (row.key === "packaging_mode") setPackagingMode(row.value as "per_order" | "per_item");
+        }
+      }
+      setLoading(false);
+    }
+    loadSettings();
+  }, [supabase]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    const taxValue = parseFloat(taxRate) / 100;
+    const packagingValue = parseFloat(packagingCharge);
+
+    if (isNaN(taxValue) || isNaN(packagingValue)) {
+      toast.error("Please enter valid numbers");
+      setSaving(false);
+      return;
+    }
+
+    const { error: e1 } = await supabase
+      .from("app_settings")
+      .update({ value: String(taxValue), updated_at: new Date().toISOString() } as never)
+      .eq("key", "tax_rate");
+
+    const { error: e2 } = await supabase
+      .from("app_settings")
+      .update({ value: String(packagingValue), updated_at: new Date().toISOString() } as never)
+      .eq("key", "packaging_charge");
+
+    const { error: e3 } = await supabase
+      .from("app_settings")
+      .update({ value: packagingMode, updated_at: new Date().toISOString() } as never)
+      .eq("key", "packaging_mode");
+
+    if (e1 || e2 || e3) {
+      toast.error("Failed to save settings");
+    } else {
+      toast.success("Settings saved successfully");
+    }
+    setSaving(false);
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl space-y-8">
@@ -60,22 +117,47 @@ export default function AdminSettingsPage() {
           />
         </div>
 
-        <div className="flex items-center gap-3 mt-6">
-          <Button size="sm" onClick={handleSave}>
-            <Save className="w-4 h-4" />
-            {saved ? "Saved!" : "Save Changes"}
-          </Button>
-          {saved && (
-            <span className="text-sm text-brand-green font-semibold">
-              Settings saved (local only for now)
-            </span>
-          )}
+        <div className="mt-4">
+          <label className="text-sm font-semibold text-brand-gray-700 mb-2 block">
+            Packaging Charge Mode
+          </label>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setPackagingMode("per_order")}
+              className={`flex-1 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
+                packagingMode === "per_order"
+                  ? "border-brand-yellow bg-brand-yellow/10 text-brand-yellow-dark"
+                  : "border-brand-gray-200 bg-white text-brand-gray-600 hover:border-brand-gray-300"
+              }`}
+            >
+              Per Order
+            </button>
+            <button
+              type="button"
+              onClick={() => setPackagingMode("per_item")}
+              className={`flex-1 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
+                packagingMode === "per_item"
+                  ? "border-brand-yellow bg-brand-yellow/10 text-brand-yellow-dark"
+                  : "border-brand-gray-200 bg-white text-brand-gray-600 hover:border-brand-gray-300"
+              }`}
+            >
+              Per Item
+            </button>
+          </div>
+          <p className="text-xs text-brand-gray-400 mt-1.5">
+            {packagingMode === "per_order"
+              ? "Same packaging fee regardless of number of items"
+              : "Packaging fee applied to each item in the order"}
+          </p>
         </div>
 
-        <p className="text-xs text-brand-gray-400 mt-3">
-          These values are currently sourced from app constants. DB-backed
-          settings will be implemented in a future update.
-        </p>
+        <div className="flex items-center gap-3 mt-6">
+          <Button size="sm" loading={saving} onClick={handleSave}>
+            <Save className="w-4 h-4" />
+            Save Changes
+          </Button>
+        </div>
       </div>
 
       {/* App Info */}

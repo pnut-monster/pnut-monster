@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getImageUrl } from "@/lib/utils/image";
 import { motion } from "framer-motion";
+import type { Variants } from "framer-motion";
 import {
   Search,
   MapPin,
@@ -14,13 +15,13 @@ import {
   ArrowRight,
   Plus,
   Sparkles,
-  TrendingUp,
   Gift,
-  Info,
+  ShoppingBag,
 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { useOutletStore } from "@/lib/stores/outlet-store";
+import { useCartStore } from "@/lib/stores/cart-store";
 import { formatCurrency } from "@/lib/utils/helpers";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -30,14 +31,8 @@ import type {
   MenuItem,
   Wallet as WalletType,
   LoyaltyAccount,
-  LoyaltyTier,
-  Mission,
   Campaign,
 } from "@/lib/supabase/types";
-
-interface MissionWithProgress extends Mission {
-  current_count: number;
-}
 
 const CATEGORY_EMOJIS: Record<string, string> = {
   sprouts: "🌱",
@@ -60,12 +55,12 @@ function getCategoryEmoji(name: string): string {
   return "🍽️";
 }
 
-const fadeUp = {
+const fadeUp: Variants = {
   hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] } },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } },
 };
 
-const staggerContainer = {
+const staggerContainer: Variants = {
   hidden: {},
   visible: {
     transition: { staggerChildren: 0.06 },
@@ -74,14 +69,14 @@ const staggerContainer = {
 
 export default function CustomerHomePage() {
   const { selectedOutlet } = useOutletStore();
+  const cartItemCount = useCartStore((s) => s.getItemCount());
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [popularItems, setPopularItems] = useState<MenuItem[]>([]);
   const [wallet, setWallet] = useState<WalletType | null>(null);
   const [loyaltyAccount, setLoyaltyAccount] = useState<LoyaltyAccount | null>(null);
-  const [loyaltyTier, setLoyaltyTier] = useState<LoyaltyTier | null>(null);
-  const [missions, setMissions] = useState<MissionWithProgress[]>([]);
+  const [orderCount, setOrderCount] = useState(0);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -123,14 +118,7 @@ export default function CustomerHomePage() {
 
           promises.push(
             supabase.from("loyalty_accounts").select("*").eq("user_id", user.id).single()
-              .then(async ({ data }) => {
-                const acc = data as LoyaltyAccount | null;
-                setLoyaltyAccount(acc);
-                if (acc?.tier_id) {
-                  const { data: tierData } = await supabase.from("loyalty_tiers").select("*").eq("id", acc.tier_id).single();
-                  setLoyaltyTier(tierData as LoyaltyTier | null);
-                }
-              })
+              .then(({ data }) => setLoyaltyAccount(data as LoyaltyAccount | null))
           );
 
           promises.push(
@@ -141,6 +129,11 @@ export default function CustomerHomePage() {
                 const now = new Date().toISOString();
                 setCampaigns(camps.filter(c => c.starts_at <= now && c.ends_at >= now));
               })
+          );
+
+          promises.push(
+            supabase.from("orders").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "picked_up")
+              .then(({ count }) => setOrderCount(count ?? 0))
           );
         }
 
@@ -156,11 +149,6 @@ export default function CustomerHomePage() {
   }, []);
 
   const firstName = profile?.full_name?.split(" ")[0];
-
-  function getTierDisplayName(tier: LoyaltyTier | null): string {
-    if (!tier) return "Sprout Star";
-    return tier.name.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-  }
 
   return (
     <div className="pb-8">
@@ -294,37 +282,35 @@ export default function CustomerHomePage() {
               {/* Loyalty Card */}
               <Link href="/loyalty" className="block">
                 <div className="bg-white rounded-2xl p-6 border border-brand-gray-200 hover:border-purple-300 hover:shadow-xl transition-all group">
-                  <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center group-hover:bg-purple-200 transition-colors">
                         <Star className="w-6 h-6 text-purple-600" />
                       </div>
                       <div>
                         <p className="text-xs font-bold text-brand-gray-500 uppercase tracking-wider">
-                          POINTS
+                          ORDERS
                         </p>
                         {loading ? (
-                          <Skeleton className="h-8 w-24 mt-1" />
+                          <Skeleton className="h-8 w-16 mt-1" />
                         ) : (
                           <p className="text-2xl font-heading font-bold text-brand-black">
-                            {loyaltyAccount?.current_points ?? 0}
+                            {orderCount}
                           </p>
                         )}
                       </div>
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-brand-gray-600 font-medium">Progress to next tier</span>
-                      <span className="font-bold text-purple-600">{getTierDisplayName(loyaltyTier)}</span>
-                    </div>
-                    <div className="h-2 bg-brand-gray-100 rounded-full overflow-hidden">
-                      <motion.div
-                        className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"
-                        initial={{ width: 0 }}
-                        animate={{ width: "60%" }}
-                        transition={{ duration: 1, delay: 0.3 }}
-                      />
+                    <div className="text-right">
+                      <p className="text-xs font-bold text-brand-gray-500 uppercase tracking-wider">
+                        POINTS
+                      </p>
+                      {loading ? (
+                        <Skeleton className="h-8 w-16 mt-1" />
+                      ) : (
+                        <p className="text-2xl font-heading font-bold text-purple-600">
+                          {loyaltyAccount?.current_points ?? 0}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -405,7 +391,7 @@ export default function CustomerHomePage() {
                 <Flame className="w-6 h-6 text-orange-500" />
                 Popular Items
               </h3>
-              <p className="text-sm text-brand-gray-600">Everyone's favorite picks</p>
+              <p className="text-sm text-brand-gray-600">Everyone&apos;s favorite picks</p>
             </div>
             <Link
               href="/menu"
@@ -552,6 +538,18 @@ export default function CustomerHomePage() {
           </motion.section>
         )}
       </motion.div>
+
+      {/* Floating Cart Button */}
+      {cartItemCount > 0 && (
+        <Link
+          href="/cart"
+          className="fixed bottom-24 right-4 z-50 flex items-center gap-2 bg-brand-yellow hover:bg-brand-yellow-dark text-brand-black font-bold px-5 py-3.5 rounded-2xl shadow-xl hover:shadow-2xl transition-all active:scale-95"
+        >
+          <ShoppingBag className="w-5 h-5" />
+          <span className="text-sm">{cartItemCount} {cartItemCount === 1 ? "item" : "items"}</span>
+          <ArrowRight className="w-4 h-4" />
+        </Link>
+      )}
     </div>
   );
 }
