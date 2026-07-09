@@ -58,7 +58,9 @@ function checkRateLimit(key: string) {
 }
 
 async function requireUploadAccess(folder?: string) {
-  const supabase = await createClient();
+  const supabase = await createClient(
+    folder === "avatars" ? "sb-customer-auth-token" : "sb-admin-auth-token"
+  );
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -4,7 +4,7 @@ import { sendEmail, welcomeEmail } from "@/lib/email";
 
 export async function POST() {
   try {
-    const supabase = await createClient();
+    const supabase = await createClient("sb-customer-auth-token");
     const {
       data: { user },
     } = await supabase.auth.getUser();

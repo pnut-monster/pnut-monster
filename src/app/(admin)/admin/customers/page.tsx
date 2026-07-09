@@ -270,11 +270,13 @@ export default function AdminCustomersPage() {
     if (!roleChangeUser) return;
     setRoleSaving(true);
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ role: newRole } as never)
-        .eq("id", roleChangeUser.id);
-      if (error) throw error;
+      const response = await fetch("/api/admin/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: roleChangeUser.id, role: newRole }),
+      });
+      const result = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) throw new Error(result?.error ?? "Could not update role");
       toast.success("Role updated");
       setRoleChangeUser(null);
       await fetchUsers();

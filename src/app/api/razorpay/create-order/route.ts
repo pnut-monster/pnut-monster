@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
     }
 
-    const supabase = await createClient();
+    const supabase = await createClient("sb-customer-auth-token");
     const {
       data: { user },
     } = await supabase.auth.getUser();

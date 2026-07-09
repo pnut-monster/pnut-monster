@@ -59,6 +59,10 @@ const nextConfig = {
       },
       {
         protocol: "https" as const,
+        hostname: "assets.pnut.monster",
+      },
+      {
+        protocol: "https" as const,
         hostname: "*.supabase.co",
         pathname: "/storage/v1/object/public/**",
       },

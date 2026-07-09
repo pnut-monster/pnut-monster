@@ -16,6 +16,11 @@ const CreateUserSchema = z.object({
   role: z.enum(["customer", "outlet_staff", "admin", "super_admin"]),
 });
 
+const UpdateUserRoleSchema = z.object({
+  userId: z.string().uuid(),
+  role: z.enum(["customer", "outlet_staff", "admin", "super_admin"]),
+});
+
 function assertSameOrigin(request: NextRequest) {
   const origin = request.headers.get("origin");
   if (!origin) return null;
@@ -32,7 +37,7 @@ function assertSameOrigin(request: NextRequest) {
 }
 
 async function requireAdmin() {
-  const supabase = await createClient();
+  const supabase = await createClient("sb-admin-auth-token");
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -128,4 +133,51 @@ export async function POST(request: NextRequest) {
     email: payload.email,
     role: payload.role,
   });
+}
+
+export async function PATCH(request: NextRequest) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
+  const access = await requireAdmin();
+  if (access.error) return access.error;
+
+  const parsed = UpdateUserRoleSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid role update" }, { status: 400 });
+  }
+
+  const payload = parsed.data;
+  if (ELEVATED_ROLES.has(payload.role) && access.role !== "super_admin") {
+    return NextResponse.json(
+      { error: "Only super admins can grant admin roles" },
+      { status: 403 }
+    );
+  }
+
+  const supabase = await createClient("sb-admin-auth-token");
+  const { data: targetProfile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", payload.userId)
+    .single();
+
+  const targetRole = (targetProfile as { role?: string } | null)?.role;
+  if (ELEVATED_ROLES.has(targetRole ?? "") && access.role !== "super_admin") {
+    return NextResponse.json(
+      { error: "Only super admins can change admin users" },
+      { status: 403 }
+    );
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ role: payload.role } as never)
+    .eq("id", payload.userId);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ id: payload.userId, role: payload.role });
 }

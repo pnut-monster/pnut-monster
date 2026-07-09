@@ -15,6 +15,7 @@
 
 # next.js
 /.next/
+.next-*.log
 /out/
 /public/sw.js
 
@@ -36,6 +37,10 @@ yarn-error.log*
 
 # vercel
 .vercel
+
+# local tool/runtime state
+.claude/
+supabase/.temp/
 
 # typescript
 *.tsbuildinfo
