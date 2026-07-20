@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -88,17 +88,21 @@ function NotificationIcon({ type }: { type: Notification["type"] }) {
 
 export default function NotificationsPage() {
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
 
   const fetchNotifications = useCallback(async () => {
     try {
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const currentUserId = session?.user?.id ?? null;
+      setUserId(currentUserId);
+
+      if (!currentUserId) {
         setLoading(false);
         return;
       }
@@ -106,8 +110,9 @@ export default function NotificationsPage() {
       const { data } = await supabase
         .from("notifications")
         .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
+        .eq("user_id", currentUserId)
+        .order("created_at", { ascending: false })
+        .limit(100);
 
       const notifs = (data ?? []) as Notification[];
       setNotifications(notifs);
@@ -122,6 +127,30 @@ export default function NotificationsPage() {
     fetchNotifications();
   }, [fetchNotifications]);
 
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel(`customer-notifications-page-${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          fetchNotifications();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchNotifications, supabase, userId]);
+
   const markAsRead = async (notif: Notification) => {
     if (notif.is_read) return;
 
@@ -130,10 +159,16 @@ export default function NotificationsPage() {
       prev.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n))
     );
 
-    await supabase
+    const { error } = await supabase
       .from("notifications")
       .update({ is_read: true } as never)
       .eq("id", notif.id);
+
+    if (error) {
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === notif.id ? { ...n, is_read: false } : n))
+      );
+    }
   };
 
   const markAllAsRead = async () => {
@@ -146,23 +181,37 @@ export default function NotificationsPage() {
     // Optimistically update UI
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!userId) return;
 
-    await supabase
+    const { error } = await supabase
       .from("notifications")
       .update({ is_read: true } as never)
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("is_read", false);
+
+    if (error) fetchNotifications();
   };
 
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const { todayNotifs, earlierNotifs, unreadCount } = useMemo(() => {
+    const today: Notification[] = [];
+    const earlier: Notification[] = [];
+    let unread = 0;
 
-  // Group notifications
-  const todayNotifs = notifications.filter((n) => isToday(n.created_at));
-  const earlierNotifs = notifications.filter((n) => !isToday(n.created_at));
+    for (const notification of notifications) {
+      if (!notification.is_read) unread += 1;
+      if (isToday(notification.created_at)) {
+        today.push(notification);
+      } else {
+        earlier.push(notification);
+      }
+    }
+
+    return {
+      todayNotifs: today,
+      earlierNotifs: earlier,
+      unreadCount: unread,
+    };
+  }, [notifications]);
 
   if (loading) {
     return (

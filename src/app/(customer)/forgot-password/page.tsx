@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Mail, ArrowLeft, Loader2, CheckCircle } from "lucide-react";
@@ -83,7 +84,14 @@ export default function ForgotPasswordPage() {
 
       {/* Content */}
       <div className="flex-1 flex flex-col items-center px-6 pt-12">
-        <img src="/logo.webp" alt="PNUT MONSTER" className="w-20 h-20 mb-4 object-contain" />
+        <Image
+          src="/logo.webp"
+          alt="PNUT MONSTER"
+          width={80}
+          height={80}
+          priority
+          className="mb-4 object-contain"
+        />
 
         <h1 className="font-heading text-2xl font-bold text-brand-black text-center">
           Forgot your password?

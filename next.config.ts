@@ -8,6 +8,22 @@ const withSerwist = withSerwistInit({
   disable: isDev,
 });
 
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data:",
+  "connect-src 'self' https: wss: http://127.0.0.1:54331 ws://127.0.0.1:54331",
+  "frame-src https://api.razorpay.com https://checkout.razorpay.com",
+  "worker-src 'self' blob:",
+  ...(isDev ? [] : ["upgrade-insecure-requests"]),
+].join("; ");
+
 const nextConfig = {
   ...(isDev ? { allowedDevOrigins: ["127.0.0.1", "10.0.0.8", "localhost"] } : {}),
   async headers() {
@@ -19,6 +35,7 @@ const nextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self)" },
+          { key: "Content-Security-Policy", value: contentSecurityPolicy },
           ...(isDev
             ? []
             : [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }]),

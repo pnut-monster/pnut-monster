@@ -20,6 +20,7 @@ import type { Json } from "@/lib/supabase/types";
 import toast from "react-hot-toast";
 
 type PaymentMethod = "online" | "wallet" | "split";
+type RewardOption = "coupon" | "loyalty";
 
 declare global {
   interface Window {
@@ -71,7 +72,6 @@ export default function CheckoutPage() {
   const [walletData, setWalletData] = useState<WalletType | null>(null);
   const [walletLoading, setWalletLoading] = useState(true);
   const [useWallet, setUseWallet] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("online");
   const [placing, setPlacing] = useState(false);
   const [taxRate, setTaxRate] = useState(0.05);
   const [packagingCharge, setPackagingCharge] = useState(10);
@@ -85,6 +85,7 @@ export default function CheckoutPage() {
   const [loyaltyPointValue, setLoyaltyPointValue] = useState(0.25);
   const [loyaltyUserBalance, setLoyaltyUserBalance] = useState(0);
   const [loyaltyReason, setLoyaltyReason] = useState("");
+  const [rewardOption, setRewardOption] = useState<RewardOption>("coupon");
 
   // Nth order discount
   const [nthOrderEligible, setNthOrderEligible] = useState(false);
@@ -132,7 +133,10 @@ export default function CheckoutPage() {
   }, [user, authLoading]);
 
   const subtotal = getSubtotal();
-  const discount = coupon_discount;
+  const hasCouponDiscount = !!coupon_code && coupon_discount > 0;
+  const loyaltySelected = useLoyalty && rewardOption === "loyalty";
+  const couponSelected = hasCouponDiscount && !loyaltySelected;
+  const discount = couponSelected ? coupon_discount : 0;
   // Nth order discount: only applies when no coupon is used
   const nthOrderDiscountAmount = (nthOrderEligible && discount === 0)
     ? Math.round(subtotal * nthOrderDiscountPct / 100 * 100) / 100
@@ -147,7 +151,7 @@ export default function CheckoutPage() {
   const total = taxableAmount + tax + packaging;
 
   // Loyalty: only stacks if admin allows it
-  const loyaltyDiscount = (useLoyalty && (nthOrderDiscountAmount === 0 || nthOrderStackWithLoyalty))
+  const loyaltyDiscount = (loyaltySelected && (nthOrderDiscountAmount === 0 || nthOrderStackWithLoyalty))
     ? loyaltyMonetaryValue
     : 0;
   const totalAfterLoyalty = total - loyaltyDiscount;
@@ -158,6 +162,12 @@ export default function CheckoutPage() {
 
   const walletApplied = useWallet ? Math.min(walletBalance, totalAfterLoyalty) : 0;
   const amountDue = totalAfterLoyalty - walletApplied;
+  const paymentMethod: PaymentMethod =
+    useWallet && walletApplied >= totalAfterLoyalty
+      ? "wallet"
+      : useWallet && walletApplied > 0
+        ? "split"
+        : "online";
 
   // Fetch loyalty eligibility
   useEffect(() => {
@@ -170,8 +180,8 @@ export default function CheckoutPage() {
           p_subtotal: subtotal,
           p_tax: tax,
           p_packaging: packaging,
-          p_has_coupon: !!coupon_code,
-          p_has_discounted_items: discount > 0,
+          p_has_coupon: false,
+          p_has_discounted_items: false,
         } as never);
 
         const result = data as { eligible: boolean; max_points: number; monetary_value: number; point_value: number; user_balance: number; reason?: string } | null;
@@ -189,7 +199,7 @@ export default function CheckoutPage() {
       }
     }
     if (!authLoading) fetchLoyaltyEligibility();
-  }, [user, authLoading, subtotal, tax, packaging, coupon_code, discount, items.length]);
+  }, [user, authLoading, subtotal, tax, packaging, items.length]);
 
   // Fetch wallet balance
   useEffect(() => {
@@ -219,26 +229,30 @@ export default function CheckoutPage() {
     }
   }, [user, authLoading]);
 
-  // Load Razorpay script
-  useEffect(() => {
-    if (document.getElementById("razorpay-script")) return;
-    const script = document.createElement("script");
-    script.id = "razorpay-script";
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.async = true;
-    document.body.appendChild(script);
-  }, []);
+  const loadRazorpayScript = () =>
+    new Promise<void>((resolve, reject) => {
+      if (window.Razorpay) {
+        resolve();
+        return;
+      }
 
-  // Auto-select payment method based on wallet toggle
-  useEffect(() => {
-    if (useWallet && walletApplied >= totalAfterLoyalty) {
-      setPaymentMethod("wallet");
-    } else if (useWallet && walletApplied > 0 && walletApplied < totalAfterLoyalty) {
-      setPaymentMethod("split");
-    } else {
-      setPaymentMethod("online");
-    }
-  }, [useWallet, walletApplied, totalAfterLoyalty]);
+      const existingScript = document.getElementById("razorpay-script") as
+        | HTMLScriptElement
+        | null;
+      if (existingScript) {
+        existingScript.addEventListener("load", () => resolve(), { once: true });
+        existingScript.addEventListener("error", () => reject(new Error("Could not load payment gateway")), { once: true });
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.id = "razorpay-script";
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Could not load payment gateway"));
+      document.body.appendChild(script);
+    });
 
   const resolveOutlet = async () => {
     const supabase = createClient();
@@ -288,7 +302,7 @@ export default function CheckoutPage() {
       total: total,
       payment_method: paymentMethod,
       payment_status: "paid" as const,
-      coupon_code: coupon_code || null,
+      coupon_code: couponSelected ? coupon_code : null,
       notes: notes || null,
     };
 
@@ -307,7 +321,7 @@ export default function CheckoutPage() {
   const placeOrderDirect = async (resolvedOutletId: string) => {
     const supabase = createClient();
     const { orderData, orderItems } = buildOrderPayload(resolvedOutletId);
-    const loyaltyPointsToRedeem = useLoyalty ? loyaltyMaxPoints : 0;
+    const loyaltyPointsToRedeem = loyaltySelected ? loyaltyMaxPoints : 0;
 
     const { data, error } = await supabase.rpc("place_order_with_wallet" as never, {
       p_order: orderData,
@@ -330,6 +344,8 @@ export default function CheckoutPage() {
   };
 
   const initiateRazorpayPayment = async (resolvedOutletId: string) => {
+    await loadRazorpayScript();
+
     const supabaseForToken = createClient();
     const { data: { session: currentSession } } = await supabaseForToken.auth.getSession();
     if (!currentSession?.access_token) {
@@ -379,7 +395,7 @@ export default function CheckoutPage() {
               },
               orderItems,
               walletAmount: walletApplied,
-              loyaltyPoints: useLoyalty ? loyaltyMaxPoints : 0,
+              loyaltyPoints: loyaltySelected ? loyaltyMaxPoints : 0,
               nthOrderDiscount: nthOrderDiscountAmount,
               accessToken: capturedAccessToken,
             }),
@@ -599,9 +615,32 @@ export default function CheckoutPage() {
           <div className="flex items-center gap-2 mb-3">
             <Star className="h-4 w-4 text-brand-yellow-dark" />
             <h3 className="font-semibold text-brand-black text-sm">
-              Loyalty Points
+              Rewards
             </h3>
           </div>
+
+          {hasCouponDiscount && (
+            <label className="flex items-center justify-between gap-3 rounded-xl border border-brand-gray-200 px-3 py-2.5 mb-3 cursor-pointer hover:bg-brand-gray-50 transition-colors">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-brand-black">
+                  Use Coupon Discount
+                </p>
+                <p className="text-xs text-brand-green-dark">
+                  {coupon_code} saves {formatCurrency(coupon_discount)}
+                </p>
+              </div>
+              <input
+                type="radio"
+                name="reward"
+                checked={couponSelected}
+                onChange={() => {
+                  setRewardOption("coupon");
+                  setUseLoyalty(false);
+                }}
+                className="w-4 h-4 text-brand-yellow accent-yellow-500"
+              />
+            </label>
+          )}
 
           {loyaltyEligible && !(nthOrderDiscountAmount > 0 && !nthOrderStackWithLoyalty) ? (
             <div>
@@ -617,15 +656,21 @@ export default function CheckoutPage() {
                 </span>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
-                    type="checkbox"
-                    checked={useLoyalty}
-                    onChange={(e) => setUseLoyalty(e.target.checked)}
-                    className="sr-only peer"
+                    type={hasCouponDiscount ? "radio" : "checkbox"}
+                    name={hasCouponDiscount ? "reward" : undefined}
+                    checked={loyaltySelected}
+                    onChange={(e) => {
+                      setUseLoyalty(e.target.checked);
+                      setRewardOption(e.target.checked ? "loyalty" : "coupon");
+                    }}
+                    className={hasCouponDiscount ? "w-4 h-4 text-brand-yellow accent-yellow-500" : "sr-only peer"}
                   />
-                  <div className="w-10 h-5 bg-brand-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-brand-yellow rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-yellow" />
+                  {!hasCouponDiscount && (
+                    <div className="w-10 h-5 bg-brand-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-brand-yellow rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-yellow" />
+                  )}
                 </label>
               </div>
-              {useLoyalty && (
+              {loyaltySelected && (
                 <div className="text-xs text-brand-green-dark bg-green-50 rounded-lg px-3 py-2">
                   {loyaltyMaxPoints.toLocaleString("en-IN")} points ({formatCurrency(loyaltyMonetaryValue)}) will be applied as discount
                 </div>
@@ -657,7 +702,6 @@ export default function CheckoutPage() {
                 value="online"
                 checked={paymentMethod === "online" && !useWallet}
                 onChange={() => {
-                  setPaymentMethod("online");
                   setUseWallet(false);
                 }}
                 className="w-4 h-4 text-brand-yellow accent-yellow-500"
@@ -680,12 +724,11 @@ export default function CheckoutPage() {
                 <input
                   type="radio"
                   name="payment"
-                  value="wallet"
-                  checked={paymentMethod === "wallet"}
-                  onChange={() => {
-                    setPaymentMethod("wallet");
-                    setUseWallet(true);
-                  }}
+                value="wallet"
+                checked={paymentMethod === "wallet"}
+                onChange={() => {
+                  setUseWallet(true);
+                }}
                   className="w-4 h-4 text-brand-yellow accent-yellow-500"
                 />
                 <div className="flex-1">
@@ -707,12 +750,11 @@ export default function CheckoutPage() {
                 <input
                   type="radio"
                   name="payment"
-                  value="split"
-                  checked={paymentMethod === "split"}
-                  onChange={() => {
-                    setPaymentMethod("split");
-                    setUseWallet(true);
-                  }}
+                value="split"
+                checked={paymentMethod === "split"}
+                onChange={() => {
+                  setUseWallet(true);
+                }}
                   className="w-4 h-4 text-brand-yellow accent-yellow-500"
                 />
                 <div className="flex-1">

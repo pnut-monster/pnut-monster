@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Camera, ArrowRight, Loader2, Phone, CheckSquare, Square } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -119,7 +120,14 @@ export default function ProfileSetupPage() {
       <div className="max-w-lg mx-auto px-6 py-8">
         {/* Header */}
         <div className="text-center mb-8">
-          <img src="/logo.webp" alt="PNUT MONSTER" className="w-20 h-20 mx-auto mb-3 object-contain" />
+          <Image
+            src="/logo.webp"
+            alt="PNUT MONSTER"
+            width={80}
+            height={80}
+            priority
+            className="mx-auto mb-3 object-contain"
+          />
           <h1 className="font-heading text-2xl font-bold text-brand-black">
             Complete your profile
           </h1>

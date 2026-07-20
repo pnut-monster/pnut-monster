@@ -25,6 +25,21 @@ import toast from "react-hot-toast";
 
 const TOPUP_PRESETS = [100, 200, 500, 1000];
 
+type WalletSummary = Pick<
+  WalletType,
+  "id" | "user_id" | "loaded_balance" | "bonus_balance"
+>;
+type WalletTransactionSummary = Pick<
+  WalletTransaction,
+  "id" | "wallet_id" | "type" | "amount" | "description" | "created_at"
+>;
+type WalletCacheEntry = {
+  wallet: WalletSummary | null;
+  transactions: WalletTransactionSummary[];
+};
+
+const walletPageCache = new Map<string, WalletCacheEntry>();
+
 function TransactionIcon({ type }: { type: WalletTransaction["type"] }) {
   switch (type) {
     case "topup":
@@ -59,8 +74,8 @@ export default function WalletPage() {
   const supabase = createClient();
 
   const [loading, setLoading] = useState(true);
-  const [wallet, setWallet] = useState<WalletType | null>(null);
-  const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
+  const [wallet, setWallet] = useState<WalletSummary | null>(null);
+  const [transactions, setTransactions] = useState<WalletTransactionSummary[]>([]);
 
   // Top-up state
   const [showTopup, setShowTopup] = useState(false);
@@ -76,44 +91,72 @@ export default function WalletPage() {
   const [txPage, setTxPage] = useState(0);
   const TX_PAGE_SIZE = 10;
 
-  // Load Razorpay script
-  useEffect(() => {
-    if (document.getElementById("razorpay-script")) return;
-    const script = document.createElement("script");
-    script.id = "razorpay-script";
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.async = true;
-    document.body.appendChild(script);
-  }, []);
+  const loadRazorpayScript = () =>
+    new Promise<void>((resolve, reject) => {
+      if (window.Razorpay) {
+        resolve();
+        return;
+      }
+
+      const existingScript = document.getElementById("razorpay-script") as
+        | HTMLScriptElement
+        | null;
+      if (existingScript) {
+        existingScript.addEventListener("load", () => resolve(), { once: true });
+        existingScript.addEventListener("error", () => reject(new Error("Could not load payment gateway")), { once: true });
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.id = "razorpay-script";
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Could not load payment gateway"));
+      document.body.appendChild(script);
+    });
 
   const fetchData = useCallback(async () => {
     try {
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
+        data: { session },
+      } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) {
         setLoading(false);
         return;
       }
 
+      const cached = walletPageCache.get(user.id);
+      if (cached) {
+        setWallet(cached.wallet);
+        setTransactions(cached.transactions);
+        setLoading(false);
+      }
+
       const { data: walletData } = await supabase
         .from("wallets")
-        .select("*")
+        .select("id, user_id, loaded_balance, bonus_balance")
         .eq("user_id", user.id)
         .single();
-      const w = walletData as WalletType | null;
+      const w = walletData as WalletSummary | null;
       setWallet(w);
 
+      let txs: WalletTransactionSummary[] = [];
       if (w) {
         const { data: txData } = await supabase
           .from("wallet_transactions")
-          .select("*")
+          .select("id, wallet_id, type, amount, description, created_at")
           .eq("wallet_id", w.id)
           .order("created_at", { ascending: false })
           .limit(50);
-        const txs = (txData ?? []) as WalletTransaction[];
+        txs = (txData ?? []) as WalletTransactionSummary[];
         setTransactions(txs);
+      } else {
+        setTransactions([]);
       }
+
+      walletPageCache.set(user.id, { wallet: w, transactions: txs });
     } catch (err) {
       console.error("Failed to fetch wallet data:", err);
     } finally {
@@ -134,6 +177,8 @@ export default function WalletPage() {
 
     setTopupLoading(true);
     try {
+      await loadRazorpayScript();
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         toast.error("Please login to continue");

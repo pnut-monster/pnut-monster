@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { CheckCircle, Eye, EyeOff, Loader2, Lock } from "lucide-react";
@@ -114,7 +115,14 @@ export default function ResetPasswordPage() {
   return (
     <div className="min-h-dvh bg-brand-cream flex flex-col">
       <div className="flex-1 flex flex-col items-center px-6 pt-16">
-        <img src="/logo.webp" alt="PNUT MONSTER" className="w-20 h-20 mb-4 object-contain" />
+        <Image
+          src="/logo.webp"
+          alt="PNUT MONSTER"
+          width={80}
+          height={80}
+          priority
+          className="mb-4 object-contain"
+        />
 
         <h1 className="font-heading text-2xl font-bold text-brand-black text-center">
           Reset your password

@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { getImageUrl } from "@/lib/utils/image";
-import { motion } from "framer-motion";
-import type { Variants } from "framer-motion";
 import {
   Search,
   MapPin,
@@ -55,18 +54,6 @@ function getCategoryEmoji(name: string): string {
   return "🍽️";
 }
 
-const fadeUp: Variants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } },
-};
-
-const staggerContainer: Variants = {
-  hidden: {},
-  visible: {
-    transition: { staggerChildren: 0.06 },
-  },
-};
-
 export default function CustomerHomePage() {
   const { selectedOutlet } = useOutletStore();
   const cartItemCount = useCartStore((s) => s.getItemCount());
@@ -85,63 +72,111 @@ export default function CustomerHomePage() {
     const supabase = createClient();
 
     async function loadData() {
+      const withTimeout = async <T,>(
+        promise: PromiseLike<T>,
+        fallback: T,
+        ms = 5000
+      ) => {
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<T>((resolve) => {
+          timeoutId = setTimeout(() => resolve(fallback), ms);
+        });
+
+        try {
+          return await Promise.race([Promise.resolve(promise), timeout]);
+        } finally {
+          if (timeoutId) clearTimeout(timeoutId);
+        }
+      };
+
       try {
-        const { data } = await supabase.auth.getUser();
-        const user = data.user;
+        await withTimeout(
+          Promise.allSettled([
+            supabase
+              .from("menu_categories")
+              .select("*")
+              .eq("is_active", true)
+              .order("sort_order")
+              .then(({ data }) => setCategories((data as MenuCategory[]) ?? [])),
+            supabase
+              .from("menu_items")
+              .select("*")
+              .eq("is_bestseller", true)
+              .eq("is_active", true)
+              .order("sort_order")
+              .limit(10)
+              .then(({ data }) => setPopularItems((data as MenuItem[]) ?? [])),
+          ]),
+          null,
+          3000
+        );
+      } catch {
+        // Public content should never block the rest of the page.
+      } finally {
+        setLoading(false);
+      }
+
+      try {
+        const session = await withTimeout(
+          supabase.auth.getSession().then(({ data }) => data.session).catch(() => null),
+          null,
+          1500
+        );
+        const user = session?.user;
         const loggedIn = !!user;
         setIsLoggedIn(loggedIn);
 
-        const promises: PromiseLike<void>[] = [];
-
-        if (loggedIn && user) {
-          promises.push(
-            supabase.from("profiles").select("*").eq("id", user.id).single()
-              .then(({ data }) => setProfile(data as Profile | null))
-          );
+        if (!loggedIn || !user) {
+          return;
         }
 
-        promises.push(
-          supabase.from("menu_categories").select("*").eq("is_active", true).order("sort_order")
-            .then(({ data }) => setCategories(data as MenuCategory[] ?? []))
-        );
-
-        promises.push(
-          supabase.from("menu_items").select("*").eq("is_bestseller", true).eq("is_active", true).order("sort_order").limit(10)
-            .then(({ data }) => setPopularItems(data as MenuItem[] ?? []))
-        );
-
-        if (loggedIn && user) {
-          promises.push(
-            supabase.from("wallets").select("*").eq("user_id", user.id).single()
-              .then(({ data }) => setWallet(data as WalletType | null))
-          );
-
-          promises.push(
-            supabase.from("loyalty_accounts").select("*").eq("user_id", user.id).single()
-              .then(({ data }) => setLoyaltyAccount(data as LoyaltyAccount | null))
-          );
-
-          promises.push(
-            supabase.from("campaigns").select("*").eq("is_active", true)
+        await withTimeout(
+          Promise.allSettled([
+            supabase
+              .from("profiles")
+              .select("*")
+              .eq("id", user.id)
+              .single()
+              .then(({ data }) => setProfile(data as Profile | null)),
+            supabase
+              .from("wallets")
+              .select("*")
+              .eq("user_id", user.id)
+              .single()
+              .then(({ data }) => setWallet(data as WalletType | null)),
+            supabase
+              .from("loyalty_accounts")
+              .select("*")
+              .eq("user_id", user.id)
+              .single()
+              .then(({ data }) => setLoyaltyAccount(data as LoyaltyAccount | null)),
+            supabase
+              .from("campaigns")
+              .select("*")
+              .eq("is_active", true)
               .then(({ data }) => {
                 const camps = data as Campaign[] | null;
-                if (!camps?.length) { setCampaigns([]); return; }
+                if (!camps?.length) {
+                  setCampaigns([]);
+                  return;
+                }
                 const now = new Date().toISOString();
-                setCampaigns(camps.filter(c => c.starts_at <= now && c.ends_at >= now));
-              })
-          );
-
-          promises.push(
-            supabase.from("orders").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "picked_up")
-              .then(({ count }) => setOrderCount(count ?? 0))
-          );
-        }
-
-        await Promise.allSettled(promises);
+                setCampaigns(
+                  camps.filter((c) => c.starts_at <= now && c.ends_at >= now)
+                );
+              }),
+            supabase
+              .from("orders")
+              .select("id", { count: "exact", head: true })
+              .eq("user_id", user.id)
+              .eq("status", "picked_up")
+              .then(({ count }) => setOrderCount(count ?? 0)),
+          ]),
+          null,
+          5000
+        );
       } catch {
-        // Handle errors silently
-      } finally {
-        setLoading(false);
+        setIsLoggedIn(false);
       }
     }
 
@@ -152,14 +187,9 @@ export default function CustomerHomePage() {
 
   return (
     <div className="pb-8">
-      <motion.div
-        className="max-w-7xl mx-auto px-4 lg:px-8"
-        initial="hidden"
-        animate="visible"
-        variants={staggerContainer}
-      >
+      <div className="max-w-7xl mx-auto px-4 lg:px-8">
         {/* Header Section */}
-        <motion.section className="pt-6 pb-8" variants={fadeUp}>
+        <section className="pt-6 pb-8">
           <div className="flex items-start justify-between gap-6 flex-wrap">
             {/* Greeting */}
             <div className="flex-1 min-w-[300px]">
@@ -196,12 +226,12 @@ export default function CustomerHomePage() {
               <ChevronRight className="w-5 h-5 text-brand-gray-400 group-hover:text-brand-green group-hover:translate-x-1 transition-all" />
             </Link>
           </div>
-        </motion.section>
+        </section>
 
         {/* Main Content Grid */}
         <div className="grid lg:grid-cols-3 gap-6 mb-8">
           {/* Left: Hero Banner */}
-          <motion.div className="lg:col-span-2" variants={fadeUp}>
+          <div className="lg:col-span-2">
             <div className="bg-gradient-to-br from-brand-yellow/10 via-white to-brand-green/5 rounded-3xl p-8 lg:p-10 border border-brand-yellow/30 relative overflow-hidden">
               {/* Background pattern */}
               <div className="absolute top-0 right-0 w-64 h-64 bg-brand-yellow/5 rounded-full -mr-32 -mt-32" />
@@ -244,11 +274,11 @@ export default function CustomerHomePage() {
                 </Link>
               </div>
             </div>
-          </motion.div>
+          </div>
 
           {/* Right: Wallet & Loyalty Cards */}
           {isLoggedIn && (
-            <motion.div className="space-y-4" variants={fadeUp}>
+            <div className="space-y-4">
               {/* Wallet Card */}
               <Link href="/wallet" className="block">
                 <div className="bg-white rounded-2xl p-6 border border-brand-gray-200 hover:border-brand-green hover:shadow-xl transition-all group">
@@ -315,12 +345,12 @@ export default function CustomerHomePage() {
                   </div>
                 </div>
               </Link>
-            </motion.div>
+            </div>
           )}
         </div>
 
         {/* Search Bar - Mobile Only */}
-        <motion.section className="lg:hidden mb-6" variants={fadeUp}>
+        <section className="lg:hidden mb-6">
           <Link
             href="/search"
             className="flex items-center gap-3 w-full bg-white rounded-2xl px-5 py-4 border border-brand-gray-200 hover:border-brand-yellow shadow-sm transition-all"
@@ -330,10 +360,10 @@ export default function CustomerHomePage() {
               Search sprouts, bowls, drinks...
             </span>
           </Link>
-        </motion.section>
+        </section>
 
         {/* Categories Section */}
-        <motion.section className="mb-10" variants={fadeUp}>
+        <section className="mb-10">
           <div className="flex items-center justify-between mb-5">
             <div>
               <h3 className="font-heading text-2xl font-bold text-brand-black flex items-center gap-2">
@@ -381,10 +411,10 @@ export default function CustomerHomePage() {
               <p className="text-sm text-brand-gray-500">No categories available yet.</p>
             </div>
           )}
-        </motion.section>
+        </section>
 
         {/* Popular Items Section */}
-        <motion.section className="mb-10" variants={fadeUp}>
+        <section className="mb-10">
           <div className="flex items-center justify-between mb-5">
             <div>
               <h3 className="font-heading text-2xl font-bold text-brand-black flex items-center gap-2">
@@ -424,11 +454,12 @@ export default function CustomerHomePage() {
                     {/* Image */}
                     <div className="relative aspect-square bg-white overflow-hidden">
                       {item.image_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
+                        <Image
                           src={getImageUrl(item.image_url) ?? ""}
                           alt={item.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          fill
+                          sizes="(max-width: 1024px) 50vw, 25vw"
+                          className="object-cover group-hover:scale-105 transition-transform duration-300"
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
@@ -490,11 +521,11 @@ export default function CustomerHomePage() {
               </p>
             </div>
           )}
-        </motion.section>
+        </section>
 
         {/* Active Campaigns */}
         {!loading && campaigns.length > 0 && (
-          <motion.section variants={fadeUp}>
+          <section>
             <div className="mb-5">
               <h3 className="font-heading text-2xl font-bold text-brand-black flex items-center gap-2">
                 <Gift className="w-6 h-6 text-purple-600" />
@@ -535,9 +566,9 @@ export default function CustomerHomePage() {
                 </Link>
               ))}
             </div>
-          </motion.section>
+          </section>
         )}
-      </motion.div>
+      </div>
 
       {/* Floating Cart Button */}
       {cartItemCount > 0 && (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Mail, Lock, ArrowRight, Loader2, Eye, EyeOff, KeyRound } from "lucide-react";
@@ -152,7 +153,14 @@ export default function LoginPage() {
     <div className="min-h-dvh bg-[#FAFBFC] flex flex-col">
       {/* Brand */}
       <div className="flex-shrink-0 pt-12 pb-6 px-6 text-center">
-        <img src="/logo.webp" alt="PNUT MONSTER" className="w-28 h-28 mx-auto mb-2 object-contain" />
+        <Image
+          src="/logo.webp"
+          alt="PNUT MONSTER"
+          width={112}
+          height={112}
+          priority
+          className="mx-auto mb-2 object-contain"
+        />
         <p className="text-brand-gray-500 mt-1 text-sm">Healthy never tasted this fun!</p>
       </div>
 

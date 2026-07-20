@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
 import {
   ChevronLeft,
   Check,
@@ -16,7 +15,20 @@ import { formatCurrency, formatDateTime } from "@/lib/utils/helpers";
 import { ORDER_STATUS_LABELS } from "@/lib/utils/constants";
 import type { Order, OrderItem, Outlet } from "@/lib/supabase/types";
 
+type OrderDetailRow = Order & {
+  order_items: OrderItem[] | null;
+  outlets: Pick<Outlet, "name" | "address"> | null;
+};
 type OrderStatus = Order["status"];
+
+const orderDetailCache = new Map<
+  string,
+  {
+    order: Order;
+    orderItems: OrderItem[];
+    outlet: Pick<Outlet, "name" | "address"> | null;
+  }
+>();
 
 const STATUS_STEPS: OrderStatus[] = [
   "pending",
@@ -47,42 +59,45 @@ export default function OrderTrackingPage() {
   const [loading, setLoading] = useState(true);
 
   const fetchOrder = useCallback(async () => {
+    const cached = orderDetailCache.get(orderId);
+    if (cached) {
+      setOrder(cached.order);
+      setOrderItems(cached.orderItems);
+      setOutlet(cached.outlet);
+      setLoading(false);
+    }
+
     try {
       const supabase = createClient();
 
       const { data: orderData } = await supabase
         .from("orders")
-        .select("*")
+        .select("*, order_items(*), outlets(name, address)")
         .eq("id", orderId)
         .single();
 
-      const fetchedOrder = orderData as Order | null;
+      const fetchedOrderRow = orderData as OrderDetailRow | null;
 
-      if (fetchedOrder) {
+      if (fetchedOrderRow) {
+        const { order_items, outlets, ...fetchedOrder } = fetchedOrderRow;
+        const fetchedItems = order_items ?? [];
+        const fetchedOutlet = outlets ?? null;
+
+        orderDetailCache.set(orderId, {
+          order: fetchedOrder,
+          orderItems: fetchedItems,
+          outlet: fetchedOutlet,
+        });
+
         setOrder(fetchedOrder);
-
-        const { data: itemsData } = await supabase
-          .from("order_items")
-          .select("*")
-          .eq("order_id", orderId);
-
-        const fetchedItems = (itemsData as OrderItem[] | null) ?? [];
         setOrderItems(fetchedItems);
-
-        const { data: outletData } = await supabase
-          .from("outlets")
-          .select("name, address")
-          .eq("id", fetchedOrder.outlet_id)
-          .single();
-
-        const fetchedOutlet = outletData as Pick<Outlet, "name" | "address"> | null;
         setOutlet(fetchedOutlet);
       }
     } catch (err) {
       console.error("Failed to fetch order:", err);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }, [orderId]);
 
   // Initial fetch
@@ -178,43 +193,17 @@ export default function OrderTrackingPage() {
         {order.status === "picked_up" && (
           <Card className="py-8">
             <div className="flex flex-col items-center">
-              <motion.div
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{
-                  type: "spring",
-                  stiffness: 260,
-                  damping: 20,
-                  delay: 0.1,
-                }}
-                className="w-24 h-24 rounded-full bg-brand-green flex items-center justify-center mb-5"
-              >
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{
-                    type: "spring",
-                    stiffness: 300,
-                    damping: 15,
-                    delay: 0.4,
-                  }}
-                >
-                  <Check className="h-12 w-12 text-white" strokeWidth={3} />
-                </motion.div>
-              </motion.div>
-              <motion.div
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.6, duration: 0.4 }}
-                className="text-center"
-              >
+              <div className="w-24 h-24 rounded-full bg-brand-green flex items-center justify-center mb-5">
+                <Check className="h-12 w-12 text-white" strokeWidth={3} />
+              </div>
+              <div className="text-center">
                 <h2 className="text-xl font-bold font-[family-name:var(--font-heading)] text-brand-black mb-1">
                   Order Picked Up!
                 </h2>
                 <p className="text-sm text-brand-gray-500">
                   Enjoy your meal from PNUT MONSTER
                 </p>
-              </motion.div>
+              </div>
             </div>
           </Card>
         )}

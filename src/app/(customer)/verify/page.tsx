@@ -7,16 +7,15 @@ import { Mail, ArrowLeft } from "lucide-react";
 
 export default function VerifyPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [email] = useState(() =>
+    typeof window === "undefined" ? "" : sessionStorage.getItem("pnut_verify_email") ?? ""
+  );
 
   useEffect(() => {
-    const storedEmail = sessionStorage.getItem("pnut_verify_email");
-    if (!storedEmail) {
+    if (!email) {
       router.replace("/login");
-      return;
     }
-    setEmail(storedEmail);
-  }, [router]);
+  }, [email, router]);
 
   return (
     <div className="min-h-dvh bg-brand-cream flex flex-col">

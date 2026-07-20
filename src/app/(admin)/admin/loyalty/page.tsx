@@ -170,6 +170,31 @@ type LedgerEntry = {
   created_at: string;
 };
 
+type RatingEntry = {
+  id: string;
+  user_id: string;
+  order_id: string;
+  rating: number;
+  created_at: string;
+  orders?: { order_number: string | null } | null;
+};
+
+type RatingRow = {
+  id: string;
+  user_id: string;
+  user_label: string;
+  order_id: string;
+  order_number: string | null;
+  rating: number;
+  created_at: string;
+};
+
+type ProfileSummary = {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+};
+
 export default function AdminLoyaltyPage() {
   const [section, setSection] = useState("tiers");
   const supabase = createClient();
@@ -185,6 +210,8 @@ export default function AdminLoyaltyPage() {
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [ledgerSearch, setLedgerSearch] = useState("");
   const [ledgerLoading, setLedgerLoading] = useState(true);
+  const [ratings, setRatings] = useState<RatingRow[]>([]);
+  const [ratingsLoading, setRatingsLoading] = useState(true);
 
   // --- Actions ---
   const [actions, setActions] = useState<LoyaltyAction[]>([]);
@@ -330,6 +357,39 @@ export default function AdminLoyaltyPage() {
     setLedgerLoading(false);
   }, [supabase]);
 
+  const fetchRatings = useCallback(async () => {
+    setRatingsLoading(true);
+    const { data: ratingData } = await supabase
+      .from("order_ratings" as never)
+      .select("id, user_id, order_id, rating, created_at, orders(order_number)")
+      .order("created_at" as never, { ascending: false });
+    const ratingEntries = (ratingData ?? []) as RatingEntry[];
+    const userIds = Array.from(new Set(ratingEntries.map((rating) => rating.user_id)));
+    const { data: profilesData } = userIds.length > 0
+      ? await supabase
+          .from("profiles")
+          .select("id, email, full_name")
+          .in("id", userIds)
+      : { data: [] };
+    const profiles = new Map(
+      ((profilesData ?? []) as ProfileSummary[]).map((profile) => [profile.id, profile])
+    );
+
+    setRatings(ratingEntries.map((rating) => {
+      const profile = profiles.get(rating.user_id);
+      return {
+        id: rating.id,
+        user_id: rating.user_id,
+        user_label: profile?.full_name || profile?.email || rating.user_id,
+        order_id: rating.order_id,
+        order_number: rating.orders?.order_number ?? null,
+        rating: rating.rating,
+        created_at: rating.created_at,
+      };
+    }));
+    setRatingsLoading(false);
+  }, [supabase]);
+
   const fetchNthOrderSettings = useCallback(async () => {
     const { data } = await supabase
       .from("app_settings" as never)
@@ -364,9 +424,25 @@ export default function AdminLoyaltyPage() {
     fetchRedemptionSettings();
     fetchAnalytics();
     fetchLedger();
+    fetchRatings();
     fetchNthOrderSettings();
     fetchMembershipSettings();
-  }, [fetchActions, fetchMissions, fetchPointsPct, fetchReferralProgram, fetchRedemptionSettings, fetchAnalytics, fetchLedger, fetchNthOrderSettings, fetchMembershipSettings]);
+  }, [fetchActions, fetchMissions, fetchPointsPct, fetchReferralProgram, fetchRedemptionSettings, fetchAnalytics, fetchLedger, fetchRatings, fetchNthOrderSettings, fetchMembershipSettings]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("admin-loyalty-activity")
+      .on("postgres_changes" as never, { event: "*", schema: "public", table: "loyalty_ledger" } as never, () => {
+        fetchLedger();
+        fetchAnalytics();
+      })
+      .on("postgres_changes" as never, { event: "*", schema: "public", table: "order_ratings" } as never, () => {
+        fetchRatings();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [supabase, fetchLedger, fetchAnalytics, fetchRatings]);
 
   // ===================== ACTION HANDLERS =====================
   const openActionAdd = () => {
@@ -471,6 +547,9 @@ export default function AdminLoyaltyPage() {
       (entry.order_id ?? "").toLowerCase().includes(q)
     );
   });
+  const overallRating = ratings.length > 0
+    ? ratings.reduce((sum, rating) => sum + rating.rating, 0) / ratings.length
+    : 0;
 
   // ===================== MISSION HANDLERS =====================
   const openMissionAdd = () => {
@@ -1148,6 +1227,56 @@ export default function AdminLoyaltyPage() {
             )}
           </div>
 
+          {/* User Ratings */}
+          <div className="bg-white rounded-2xl shadow-sm border border-brand-gray-100 p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-brand-yellow/20 flex items-center justify-center shadow-sm">
+                  <Star className="w-5 h-5 text-brand-yellow-dark" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-brand-black text-base">User Ratings</h3>
+                  <p className="text-xs text-brand-gray-500">Ratings submitted by customers after completed orders</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-semibold text-brand-gray-500 uppercase tracking-wide">Overall Rating</p>
+                <p className="text-xl font-bold text-brand-black">
+                  {ratings.length > 0 ? overallRating.toFixed(1) : "-"} <span className="text-sm text-brand-gray-400">/ 5</span>
+                </p>
+              </div>
+            </div>
+
+            {ratingsLoading ? (
+              <div className="flex items-center justify-center py-10"><Spinner size="lg" /></div>
+            ) : ratings.length === 0 ? (
+              <p className="text-sm text-brand-gray-400 text-center py-8">No ratings submitted yet</p>
+            ) : (
+              <div className="max-h-[320px] overflow-y-auto rounded-xl border border-brand-gray-100">
+                <table className="w-full text-xs">
+                  <thead className="bg-brand-gray-50 sticky top-0">
+                    <tr className="text-left text-brand-gray-500 uppercase tracking-wide">
+                      <th className="px-3 py-2 font-semibold">User</th>
+                      <th className="px-3 py-2 font-semibold">Order</th>
+                      <th className="px-3 py-2 font-semibold">Rating</th>
+                      <th className="px-3 py-2 font-semibold">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-brand-gray-100">
+                    {ratings.map((rating) => (
+                      <tr key={rating.id} className="hover:bg-brand-gray-50">
+                        <td className="px-3 py-2 text-brand-gray-700 max-w-[180px] truncate">{rating.user_label}</td>
+                        <td className="px-3 py-2 text-brand-gray-500">{rating.order_number ? `#${rating.order_number}` : rating.order_id}</td>
+                        <td className="px-3 py-2 font-bold text-brand-yellow-dark">{rating.rating}/5 stars</td>
+                        <td className="px-3 py-2 text-brand-gray-400 whitespace-nowrap">{formatDate(rating.created_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           {/* ─── Transaction Ledger ─── */}
           <div className="bg-white rounded-2xl shadow-sm border border-brand-gray-100 p-6 space-y-4">
             <div className="flex items-center justify-between">
@@ -1203,8 +1332,8 @@ export default function AdminLoyaltyPage() {
                         <td className={cn("px-3 py-2 font-bold", entry.type === "earn" ? "text-green-700" : "text-red-600")}>
                           {entry.type === "earn" ? "+" : "-"}{entry.points}
                         </td>
-                        <td className="px-3 py-2 text-brand-gray-600">₹{entry.monetary_value.toFixed(2)}</td>
-                        <td className="px-3 py-2 font-medium text-brand-black">{entry.balance_after}</td>
+                        <td className="px-3 py-2 text-brand-gray-600">{entry.monetary_value == null ? "-" : `₹${entry.monetary_value.toFixed(2)}`}</td>
+                        <td className="px-3 py-2 font-medium text-brand-black">{entry.balance_after ?? "-"}</td>
                         <td className="px-3 py-2 text-brand-gray-500">{entry.source}</td>
                         <td className="px-3 py-2 text-brand-gray-600 max-w-[150px] truncate">{entry.description}</td>
                         <td className="px-3 py-2 text-brand-gray-400 whitespace-nowrap">{formatDate(entry.created_at)}</td>

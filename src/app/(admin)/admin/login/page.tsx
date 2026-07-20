@@ -1,11 +1,24 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Input } from "@/components/ui";
 import { Lock, Mail, AlertCircle } from "lucide-react";
 import toast from "react-hot-toast";
+
+function clearAdminAuthCookies() {
+  if (typeof document === "undefined") return;
+
+  document.cookie
+    .split(";")
+    .map((cookie) => cookie.split("=")[0]?.trim())
+    .filter((name) => name?.startsWith("sb-admin-auth-token"))
+    .forEach((name) => {
+      document.cookie = `${name}=; Max-Age=0; path=/; SameSite=Lax`;
+    });
+}
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
@@ -27,6 +40,7 @@ export default function AdminLoginPage() {
     setError("");
 
     try {
+      clearAdminAuthCookies();
       const client = createClient();
 
       // Step 1: Authenticate
@@ -84,7 +98,14 @@ export default function AdminLoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <img src="/logo.webp" alt="PNUT MONSTER" className="w-24 h-24 mx-auto mb-2 object-contain" />
+          <Image
+            src="/logo.webp"
+            alt="PNUT MONSTER"
+            width={96}
+            height={96}
+            priority
+            className="mx-auto mb-2 object-contain"
+          />
           <p className="text-brand-cream/60 text-sm mt-1">Admin Panel</p>
         </div>
 

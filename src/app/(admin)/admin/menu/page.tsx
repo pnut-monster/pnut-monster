@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import type {
   MenuItem,
@@ -219,53 +220,95 @@ export default function AdminMenuPage() {
   }, [fetchData]);
 
   // ===================== HELPER LOOKUPS =====================
-  const categoryTabs = [
-    { label: "All", value: "all" },
-    ...categories.map((c) => ({ label: c.name, value: c.id })),
-  ];
+  const categoryTabs = useMemo(
+    () => [
+      { label: "All", value: "all" },
+      ...categories.map((c) => ({ label: c.name, value: c.id })),
+    ],
+    [categories]
+  );
 
-  const getSubcategoryName = (id: string) =>
-    subcategories.find((s) => s.id === id)?.name ?? "---";
+  const categoryById = useMemo(
+    () => new Map(categories.map((category) => [category.id, category] as const)),
+    [categories]
+  );
+
+  const subcategoryById = useMemo(
+    () => new Map(subcategories.map((subcategory) => [subcategory.id, subcategory] as const)),
+    [subcategories]
+  );
+
+  const subcategoriesByCategory = useMemo(() => {
+    const grouped = new Map<string, MenuSubcategory[]>();
+    for (const subcategory of subcategories) {
+      const existing = grouped.get(subcategory.category_id) ?? [];
+      existing.push(subcategory);
+      grouped.set(subcategory.category_id, existing);
+    }
+    for (const groupedSubcategories of grouped.values()) {
+      groupedSubcategories.sort((a, b) => a.sort_order - b.sort_order);
+    }
+    return grouped;
+  }, [subcategories]);
+
+  const itemCounts = useMemo(() => {
+    const bySubcategory = new Map<string, number>();
+    const byCategory = new Map<string, number>();
+
+    for (const item of items) {
+      bySubcategory.set(item.subcategory_id, (bySubcategory.get(item.subcategory_id) ?? 0) + 1);
+      const categoryId = subcategoryById.get(item.subcategory_id)?.category_id;
+      if (categoryId) {
+        byCategory.set(categoryId, (byCategory.get(categoryId) ?? 0) + 1);
+      }
+    }
+
+    return { bySubcategory, byCategory };
+  }, [items, subcategoryById]);
+
+  const getSubcategoryName = (id: string) => subcategoryById.get(id)?.name ?? "---";
 
   const getCategoryName = (subcategoryId: string) => {
-    const sub = subcategories.find((s) => s.id === subcategoryId);
-    if (!sub) return "---";
-    return categories.find((c) => c.id === sub.category_id)?.name ?? "---";
+    const categoryId = subcategoryById.get(subcategoryId)?.category_id;
+    return categoryId ? categoryById.get(categoryId)?.name ?? "---" : "---";
   };
 
-  const getCategoryForSubcategory = (subcategoryId: string) => {
-    const sub = subcategories.find((s) => s.id === subcategoryId);
-    return sub?.category_id ?? "";
-  };
+  const getCategoryForSubcategory = (subcategoryId: string) =>
+    subcategoryById.get(subcategoryId)?.category_id ?? "";
 
-  const getItemCountForCategory = (catId: string) => {
-    const subIds = subcategories.filter((s) => s.category_id === catId).map((s) => s.id);
-    return items.filter((i) => subIds.includes(i.subcategory_id)).length;
-  };
+  const getItemCountForCategory = (catId: string) => itemCounts.byCategory.get(catId) ?? 0;
 
-  const getItemCountForSubcategory = (subId: string) =>
-    items.filter((i) => i.subcategory_id === subId).length;
+  const getItemCountForSubcategory = (subId: string) => itemCounts.bySubcategory.get(subId) ?? 0;
 
   // ===================== ITEM FILTERS =====================
-  const filteredSubcategoryIds =
-    activeCategory === "all"
-      ? subcategories.map((s) => s.id)
-      : subcategories.filter((s) => s.category_id === activeCategory).map((s) => s.id);
+  const filteredSubcategoryIds = useMemo(
+    () =>
+      new Set(
+        activeCategory === "all"
+          ? subcategories.map((s) => s.id)
+          : (subcategoriesByCategory.get(activeCategory) ?? []).map((s) => s.id)
+      ),
+    [activeCategory, subcategories, subcategoriesByCategory]
+  );
 
-  const filteredItems = items.filter((item) => {
-    const matchesCategory = filteredSubcategoryIds.includes(item.subcategory_id);
-    const matchesSearch =
-      !search ||
-      item.name.toLowerCase().includes(search.toLowerCase()) ||
-      (item.description ?? "").toLowerCase().includes(search.toLowerCase());
-    const matchesVeg =
-      filters.veg === "all" || (filters.veg === "veg" ? item.is_veg : !item.is_veg);
-    const matchesActive =
-      filters.active === "all" || (filters.active === "active" ? item.is_active : !item.is_active);
-    const matchesBestseller =
-      filters.bestseller === "all" || (filters.bestseller === "yes" ? item.is_bestseller : !item.is_bestseller);
-    return matchesCategory && matchesSearch && matchesVeg && matchesActive && matchesBestseller;
-  });
+  const filteredItems = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+
+    return items.filter((item) => {
+      const matchesCategory = filteredSubcategoryIds.has(item.subcategory_id);
+      const matchesSearch =
+        !normalizedSearch ||
+        item.name.toLowerCase().includes(normalizedSearch) ||
+        (item.description ?? "").toLowerCase().includes(normalizedSearch);
+      const matchesVeg =
+        filters.veg === "all" || (filters.veg === "veg" ? item.is_veg : !item.is_veg);
+      const matchesActive =
+        filters.active === "all" || (filters.active === "active" ? item.is_active : !item.is_active);
+      const matchesBestseller =
+        filters.bestseller === "all" || (filters.bestseller === "yes" ? item.is_bestseller : !item.is_bestseller);
+      return matchesCategory && matchesSearch && matchesVeg && matchesActive && matchesBestseller;
+    });
+  }, [filteredSubcategoryIds, filters, items, search]);
 
   // ===================== ITEM CRUD =====================
   const openItemAdd = () => {
@@ -877,9 +920,15 @@ export default function AdminMenuPage() {
                       className="flex items-center gap-3 px-5 py-3 hover:bg-brand-gray-50 transition-colors"
                     >
                       {/* Image */}
-                      <div className="w-11 h-11 rounded-lg bg-brand-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
+                      <div className="relative w-11 h-11 rounded-lg bg-brand-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
                         {item.image_url ? (
-                          <img src={getImageUrl(item.image_url) ?? ""} alt={item.name} className="w-full h-full object-cover" />
+                          <Image
+                            src={getImageUrl(item.image_url) ?? ""}
+                            alt={item.name}
+                            fill
+                            sizes="44px"
+                            className="object-cover"
+                          />
                         ) : (
                           <span className="text-brand-gray-400 text-xs">IMG</span>
                         )}
@@ -1010,9 +1059,7 @@ export default function AdminMenuPage() {
                 .sort((a, b) => a.sort_order - b.sort_order)
                 .map((cat) => {
                   const isExpanded = expandedCats.has(cat.id);
-                  const catSubs = subcategories
-                    .filter((s) => s.category_id === cat.id)
-                    .sort((a, b) => a.sort_order - b.sort_order);
+                  const catSubs = subcategoriesByCategory.get(cat.id) ?? [];
                   const itemCount = getItemCountForCategory(cat.id);
 
                   return (

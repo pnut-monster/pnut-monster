@@ -25,16 +25,53 @@ const MAX_REQUESTS_PER_WINDOW = 30;
 // For multi-instance deployments, use platform-level rate limiting or an external store.
 const uploadRateLimit = new Map<string, { count: number; resetAt: number }>();
 
+function isDevelopmentOrigin(origin: URL): boolean {
+  if (process.env.NODE_ENV !== "development") return false;
+
+  const host = origin.hostname;
+  const isIpv4 = /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+  return (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "0.0.0.0" ||
+    host.startsWith("10.") ||
+    host.startsWith("192.168.") ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+    (origin.protocol === "http:" && (origin.port === "3000" || origin.port === "3001") && isIpv4)
+  );
+}
+
 function assertSameOrigin(request: NextRequest) {
   const origin = request.headers.get("origin");
   if (!origin) return null;
 
-  const requestOrigin = request.nextUrl.origin;
   const configuredOrigin = process.env.NEXT_PUBLIC_SITE_URL;
-  const allowedOrigins = new Set([requestOrigin]);
-  if (configuredOrigin) allowedOrigins.add(configuredOrigin);
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  const proto = request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol.replace(":", "");
+  const allowedOrigins = new Set([request.nextUrl.origin]);
 
-  if (!allowedOrigins.has(origin)) {
+  if (host) allowedOrigins.add(`${proto}://${host}`);
+  if (configuredOrigin) allowedOrigins.add(configuredOrigin.replace(/\/$/, ""));
+
+  let parsedOrigin: URL;
+  try {
+    parsedOrigin = new URL(origin);
+  } catch {
+    return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
+  }
+
+  if (host) {
+    const requestHost = host.split(",")[0]?.trim();
+    if (requestHost && parsedOrigin.host === requestHost) return null;
+  }
+
+  if (!allowedOrigins.has(parsedOrigin.origin) && !isDevelopmentOrigin(parsedOrigin)) {
+    console.warn("Blocked upload origin", {
+      origin: parsedOrigin.origin,
+      allowedOrigins: Array.from(allowedOrigins),
+      host,
+      forwardedProto: request.headers.get("x-forwarded-proto"),
+    });
     return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
   }
 

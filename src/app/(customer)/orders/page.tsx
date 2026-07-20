@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
@@ -9,7 +9,6 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Button, Card, Badge, Tabs, EmptyState, Spinner } from "@/components/ui";
-import { useAuth } from "@/lib/hooks/use-auth";
 import { useCartStore } from "@/lib/stores/cart-store";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency, formatDateTime } from "@/lib/utils/helpers";
@@ -18,6 +17,12 @@ import type { Order, OrderItem } from "@/lib/supabase/types";
 import toast from "react-hot-toast";
 
 type OrderWithItemCount = Order & { item_count: number; outlet_name: string };
+type OrderListRow = Order & {
+  order_items: { id: string }[] | null;
+  outlets: { name: string } | null;
+};
+
+const ordersPageCache = new Map<string, OrderWithItemCount[]>();
 
 const ACTIVE_STATUSES: Order["status"][] = [
   "pending",
@@ -40,7 +45,6 @@ const STATUS_BADGE_VARIANT: Record<string, "default" | "success" | "warning" | "
 
 export default function OrderHistoryPage() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
   const { addItem, setOutlet } = useCartStore();
 
   const [activeTab, setActiveTab] = useState("active");
@@ -49,67 +53,75 @@ export default function OrderHistoryPage() {
   const [reorderingId, setReorderingId] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function fetchOrders() {
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const user = session?.user;
+
       if (!user) {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
         return;
       }
 
-      try {
-        const supabase = createClient();
+      const cached = ordersPageCache.get(user.id);
+      if (cached) {
+        setOrders(cached);
+        setLoading(false);
+      }
 
-        // Fetch orders
+      try {
         const { data: ordersData } = await supabase
           .from("orders")
-          .select("*")
+          .select("*, order_items(id), outlets(name)")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false });
 
-        const fetchedOrders = (ordersData as Order[] | null) ?? [];
+        if (cancelled) return;
 
-        // Fetch item counts and outlet names for each order
-        const enrichedOrders: OrderWithItemCount[] = await Promise.all(
-          fetchedOrders.map(async (order) => {
-            const { data: itemsData } = await supabase
-              .from("order_items")
-              .select("id")
-              .eq("order_id", order.id);
-
-            const items = (itemsData as { id: string }[] | null) ?? [];
-
-            const { data: outletData } = await supabase
-              .from("outlets")
-              .select("name")
-              .eq("id", order.outlet_id)
-              .single();
-
-            const outletRow = outletData as { name: string } | null;
-
-            return {
-              ...order,
-              item_count: items.length,
-              outlet_name: outletRow?.name ?? "Unknown Outlet",
-            };
+        const fetchedOrders = (ordersData as OrderListRow[] | null) ?? [];
+        const enrichedOrders: OrderWithItemCount[] = fetchedOrders.map(
+          ({ order_items, outlets, ...order }) => ({
+            ...order,
+            item_count: order_items?.length ?? 0,
+            outlet_name: outlets?.name ?? "Unknown Outlet",
           })
         );
 
+        ordersPageCache.set(user.id, enrichedOrders);
         setOrders(enrichedOrders);
       } catch (err) {
         console.error("Failed to fetch orders:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      setLoading(false);
     }
 
-    if (!authLoading) {
-      fetchOrders();
-    }
-  }, [user, authLoading]);
+    fetchOrders();
 
-  const activeOrders = orders.filter((o) =>
-    ACTIVE_STATUSES.includes(o.status)
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const activeOrders = useMemo(
+    () => orders.filter((o) => ACTIVE_STATUSES.includes(o.status)),
+    [orders]
   );
-  const pastOrders = orders.filter((o) => PAST_STATUSES.includes(o.status));
+  const pastOrders = useMemo(
+    () => orders.filter((o) => PAST_STATUSES.includes(o.status)),
+    [orders]
+  );
   const displayedOrders = activeTab === "active" ? activeOrders : pastOrders;
+
+  useEffect(() => {
+    displayedOrders.slice(0, 5).forEach((order) => {
+      router.prefetch(`/orders/${order.id}`);
+    });
+  }, [displayedOrders, router]);
 
   const handleReorder = async (order: OrderWithItemCount) => {
     setReorderingId(order.id);
@@ -155,7 +167,7 @@ export default function OrderHistoryPage() {
     }
   };
 
-  if (authLoading || loading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-[#FAFBFC] flex items-center justify-center">
         <Spinner size="lg" />

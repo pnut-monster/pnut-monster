@@ -41,6 +41,16 @@ const TIER_DISPLAY: Record<string, { label: string; variant: "warning" | "info" 
   pnut_legend: { label: "PNUT Legend", variant: "default" },
 };
 
+type ProfilePageCacheEntry = {
+  profile: Profile | null;
+  wallet: WalletType | null;
+  loyaltyAccount: LoyaltyAccount | null;
+  currentTier: LoyaltyTier | null;
+  orderCount: number;
+};
+
+const profilePageCache = new Map<string, ProfilePageCacheEntry>();
+
 interface MenuItem {
   label: string;
   description?: string;
@@ -74,54 +84,67 @@ export default function ProfilePage() {
   const fetchData = useCallback(async () => {
     try {
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
+        data: { session },
+      } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) {
         setLoading(false);
         return;
       }
 
-      // Fetch profile
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-      const p = profileData as Profile | null;
-      setProfile(p);
+      const cached = profilePageCache.get(user.id);
+      if (cached) {
+        setProfile(cached.profile);
+        setWallet(cached.wallet);
+        setLoyaltyAccount(cached.loyaltyAccount);
+        setCurrentTier(cached.currentTier);
+        setOrderCount(cached.orderCount);
+        setLoading(false);
+      }
 
-      // Fetch wallet
-      const { data: walletData } = await supabase
-        .from("wallets")
-        .select("*")
-        .eq("user_id", user.id)
-        .single();
-      setWallet(walletData as WalletType | null);
+      const [profileResult, walletResult, loyaltyResult, orderCountResult] =
+        await Promise.all([
+          supabase.from("profiles").select("*").eq("id", user.id).single(),
+          supabase.from("wallets").select("*").eq("user_id", user.id).single(),
+          supabase
+            .from("loyalty_accounts")
+            .select("*")
+            .eq("user_id", user.id)
+            .single(),
+          supabase
+            .from("orders")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", user.id),
+        ]);
 
-      // Fetch loyalty
-      const { data: loyaltyData } = await supabase
-        .from("loyalty_accounts")
-        .select("*")
-        .eq("user_id", user.id)
-        .single();
-      const la = loyaltyData as LoyaltyAccount | null;
-      setLoyaltyAccount(la);
+      const p = profileResult.data as Profile | null;
+      const w = walletResult.data as WalletType | null;
+      const la = loyaltyResult.data as LoyaltyAccount | null;
+      const nextOrderCount = orderCountResult.count ?? 0;
 
+      let tier: LoyaltyTier | null = null;
       if (la) {
         const { data: tierData } = await supabase
           .from("loyalty_tiers")
           .select("*")
           .eq("id", la.tier_id)
           .single();
-        setCurrentTier(tierData as LoyaltyTier | null);
+        tier = tierData as LoyaltyTier | null;
       }
 
-      // Count orders
-      const { count } = await supabase
-        .from("orders")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", user.id);
-      setOrderCount(count ?? 0);
+      profilePageCache.set(user.id, {
+        profile: p,
+        wallet: w,
+        loyaltyAccount: la,
+        currentTier: tier,
+        orderCount: nextOrderCount,
+      });
+
+      setProfile(p);
+      setWallet(w);
+      setLoyaltyAccount(la);
+      setCurrentTier(tier);
+      setOrderCount(nextOrderCount);
     } catch (err) {
       console.error("Failed to fetch profile data:", err);
     } finally {
@@ -182,6 +205,7 @@ export default function ProfilePage() {
       }
 
       toast.success("Profile updated!");
+      profilePageCache.delete(profile.id);
       setEditing(false);
       setLoading(true);
       await fetchData();

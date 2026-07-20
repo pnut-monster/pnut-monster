@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -156,7 +157,14 @@ export function RestaurantShell({
         {/* Header with outlet name */}
         <div className="flex items-center justify-between px-5 h-16 border-b border-white/10">
           <Link href="/restaurant" className="flex items-center gap-2 min-w-0">
-            <img src="/logo.webp" alt="PNUT MONSTER" className="h-9 w-auto object-contain brightness-110 shrink-0" />
+            <Image
+              src="/logo.webp"
+              alt="PNUT MONSTER"
+              width={115}
+              height={36}
+              priority
+              className="h-9 w-auto object-contain brightness-110 shrink-0"
+            />
           </Link>
           <button
             type="button"

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import {
   LayoutDashboard,
@@ -23,6 +24,7 @@ import {
   ChevronDown,
   Ticket,
   Gift,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils/helpers";
 
@@ -34,6 +36,7 @@ const SIDEBAR_ITEMS = [
   { href: "/admin/coupons", label: "Coupons", icon: Ticket },
   { href: "/admin/gift-cards", label: "Gift Cards", icon: Gift },
   { href: "/admin/campaigns", label: "Campaigns", icon: Megaphone },
+  { href: "/admin/notifications", label: "Notifications", icon: Bell },
   { href: "/admin/loyalty", label: "Loyalty", icon: Star },
   { href: "/admin/customers", label: "Customers & Staff", icon: Users },
   { href: "/admin/reports", label: "Reports", icon: BarChart3 },
@@ -144,7 +147,14 @@ export function AdminShell({
         {/* Logo */}
         <div className="flex items-center justify-between px-5 h-16 border-b border-white/10">
           <Link href="/admin" className="flex items-center gap-2">
-            <img src="/logo.webp" alt="PNUT MONSTER" className="h-10 w-auto object-contain brightness-110" />
+            <Image
+              src="/logo.webp"
+              alt="PNUT MONSTER"
+              width={128}
+              height={40}
+              priority
+              className="h-10 w-auto object-contain brightness-110"
+            />
           </Link>
           <button
             type="button"

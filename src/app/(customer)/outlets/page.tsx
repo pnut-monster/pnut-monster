@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MapPin, Clock, Search, Navigation } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -9,12 +9,36 @@ import { useCartStore } from "@/lib/stores/cart-store";
 import { calculateDistance, formatDistance } from "@/lib/utils/helpers";
 import type { Outlet } from "@/lib/supabase/types";
 
-interface OutletWithDistance extends Outlet {
+type OutletSummary = Pick<
+  Outlet,
+  | "id"
+  | "name"
+  | "slug"
+  | "address"
+  | "city"
+  | "state"
+  | "pincode"
+  | "latitude"
+  | "longitude"
+  | "phone"
+  | "image_url"
+  | "is_active"
+  | "is_manually_closed"
+  | "manual_close_reason"
+  | "opens_at"
+  | "closes_at"
+  | "created_at"
+  | "updated_at"
+>;
+
+interface OutletWithDistance extends OutletSummary {
   distance: number | null;
 }
 
+let cachedOutlets: OutletSummary[] | null = null;
+
 export default function OutletsPage() {
-  const [outlets, setOutlets] = useState<OutletWithDistance[]>([]);
+  const [outlets, setOutlets] = useState<OutletSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -22,7 +46,45 @@ export default function OutletsPage() {
   const router = useRouter();
   const { setOutlet } = useOutletStore();
   const { setOutlet: setCartOutlet } = useCartStore();
-  const supabase = createClient();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchOutlets() {
+      if (cachedOutlets) {
+        setOutlets(cachedOutlets);
+        setLoading(false);
+      }
+
+      try {
+        const supabase = createClient();
+        const { data } = await supabase
+          .from("outlets")
+          .select(
+            "id, name, slug, address, city, state, pincode, latitude, longitude, phone, image_url, is_active, is_manually_closed, manual_close_reason, opens_at, closes_at, created_at, updated_at"
+          )
+          .eq("is_active", true)
+          .order("name");
+
+        if (cancelled) return;
+
+        const nextOutlets = (data as OutletSummary[] | null) ?? [];
+        cachedOutlets = nextOutlets;
+        setOutlets(nextOutlets);
+      } catch (err) {
+        console.error("Failed to fetch outlets:", err);
+        if (!cancelled && !cachedOutlets) setOutlets([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    fetchOutlets();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     // Request location
@@ -38,27 +100,8 @@ export default function OutletsPage() {
     }
   }, []);
 
-  useEffect(() => {
-    async function fetchOutlets() {
-      let outlets: Outlet[] | null = null;
-      try {
-        const { data } = await supabase
-          .from("outlets")
-          .select("*")
-          .eq("is_active", true)
-          .order("name");
-        outlets = data as Outlet[] | null;
-      } catch (err) {
-        console.error("Failed to fetch outlets:", err);
-      }
-
-      if (!outlets || outlets.length === 0) {
-        setOutlets([]);
-        setLoading(false);
-        return;
-      }
-
-      const withDistance = outlets.map((outlet) => ({
+  const outletsWithDistance = useMemo(() => {
+    const withDistance = outlets.map((outlet) => ({
         ...outlet,
         distance: userLocation
           ? calculateDistance(
@@ -70,23 +113,22 @@ export default function OutletsPage() {
           : null,
       }));
 
-      // Sort by distance if available
-      if (userLocation) {
-        withDistance.sort((a, b) => (a.distance ?? 999) - (b.distance ?? 999));
-      }
-
-      setOutlets(withDistance);
-      setLoading(false);
+    if (userLocation) {
+      withDistance.sort((a, b) => (a.distance ?? 999) - (b.distance ?? 999));
     }
 
-    fetchOutlets();
-  }, [userLocation, supabase]);
+    return withDistance;
+  }, [outlets, userLocation]);
 
-  const filtered = outlets.filter(
-    (o) =>
-      o.name.toLowerCase().includes(search.toLowerCase()) ||
-      o.address.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return outletsWithDistance;
+    return outletsWithDistance.filter(
+      (o) =>
+        o.name.toLowerCase().includes(q) ||
+        o.address.toLowerCase().includes(q)
+    );
+  }, [outletsWithDistance, search]);
 
   const handleSelect = (outlet: OutletWithDistance) => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars

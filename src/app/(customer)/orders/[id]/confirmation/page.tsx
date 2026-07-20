@@ -2,12 +2,20 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
 import { Check, Clock, ShoppingBag, XCircle, CheckCircle } from "lucide-react";
 import { Button, Card, Spinner } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils/helpers";
 import type { Order, OrderItem } from "@/lib/supabase/types";
+
+type OrderConfirmationRow = Order & {
+  order_items: OrderItem[] | null;
+};
+
+const orderConfirmationCache = new Map<
+  string,
+  { order: Order; orderItems: OrderItem[] }
+>();
 
 export default function OrderConfirmationPage() {
   const params = useParams();
@@ -22,23 +30,31 @@ export default function OrderConfirmationPage() {
     const supabase = createClient();
 
     async function fetchOrder() {
+      const cached = orderConfirmationCache.get(orderId);
+      if (cached) {
+        setOrder(cached.order);
+        setOrderItems(cached.orderItems);
+        setLoading(false);
+      }
+
       const { data: orderData } = await supabase
         .from("orders")
-        .select("*")
+        .select("*, order_items(*)")
         .eq("id", orderId)
         .single();
 
-      const fetchedOrder = orderData as Order | null;
+      const fetchedOrderRow = orderData as OrderConfirmationRow | null;
 
-      if (fetchedOrder) {
+      if (fetchedOrderRow) {
+        const { order_items, ...fetchedOrder } = fetchedOrderRow;
+        const fetchedItems = order_items ?? [];
+
+        orderConfirmationCache.set(orderId, {
+          order: fetchedOrder,
+          orderItems: fetchedItems,
+        });
+
         setOrder(fetchedOrder);
-
-        const { data: itemsData } = await supabase
-          .from("order_items")
-          .select("*")
-          .eq("order_id", orderId);
-
-        const fetchedItems = (itemsData as OrderItem[] | null) ?? [];
         setOrderItems(fetchedItems);
       }
 
@@ -95,43 +111,19 @@ export default function OrderConfirmationPage() {
     <div className="min-h-screen bg-brand-cream pb-8">
       {/* Success Animation */}
       <div className="flex flex-col items-center pt-12 pb-6 px-4">
-        <motion.div
-          initial={{ scale: 0, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{
-            type: "spring",
-            stiffness: 260,
-            damping: 20,
-            delay: 0.1,
-          }}
+        <div
           className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 ${
             isRejected ? "bg-red-500" : isAccepted ? "bg-brand-green" : "bg-brand-green"
           }`}
         >
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{
-              type: "spring",
-              stiffness: 300,
-              damping: 15,
-              delay: 0.4,
-            }}
-          >
-            {isRejected ? (
-              <XCircle className="h-10 w-10 text-white" strokeWidth={2.5} />
-            ) : (
-              <Check className="h-10 w-10 text-white" strokeWidth={3} />
-            )}
-          </motion.div>
-        </motion.div>
+          {isRejected ? (
+            <XCircle className="h-10 w-10 text-white" strokeWidth={2.5} />
+          ) : (
+            <Check className="h-10 w-10 text-white" strokeWidth={3} />
+          )}
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5, duration: 0.4 }}
-          className="text-center"
-        >
+        <div className="text-center">
           <h1 className="text-2xl font-bold font-[family-name:var(--font-heading)] text-brand-black mb-1">
             {isRejected ? "Order Rejected" : isPickedUp ? "Order Picked Up Successfully!" : isAccepted ? "Order Accepted!" : "Order Placed!"}
           </h1>
@@ -144,17 +136,12 @@ export default function OrderConfirmationPage() {
               ? "Your order has been accepted and is being processed"
               : "Waiting for outlet to accept your order"}
           </p>
-        </motion.div>
+        </div>
       </div>
 
       {/* Status Banner */}
       {!isPending && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="px-4 mb-4 space-y-3"
-        >
+        <div className="px-4 mb-4 space-y-3">
           <div
             className={`flex items-center gap-3 px-4 py-3 rounded-xl ${
               isRejected
@@ -207,15 +194,10 @@ export default function OrderConfirmationPage() {
               )}
             </div>
           )}
-        </motion.div>
+        </div>
       )}
 
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.7, duration: 0.4 }}
-        className="px-4 space-y-4"
-      >
+      <div className="px-4 space-y-4">
         {/* Order Number */}
         <Card className="text-center">
           <p className="text-xs text-brand-gray-500 uppercase tracking-wide mb-1">
@@ -289,7 +271,7 @@ export default function OrderConfirmationPage() {
             Back to Home
           </Button>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }

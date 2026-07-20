@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
+import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useCartStore, type CartCustomization } from "@/lib/stores/cart-store";
@@ -22,7 +23,6 @@ import {
   ShoppingBag,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { AnimatePresence, motion } from "framer-motion";
 
 // Step type ordering
 const STEP_ORDER: CustomizationGroup["type"][] = [
@@ -59,7 +59,6 @@ export default function ItemDetailPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [selections, setSelections] = useState<Selections>({});
   const [quantity, setQuantity] = useState(1);
-  const [direction, setDirection] = useState(1); // 1 = forward, -1 = backward
 
   // Fetch item data
   useEffect(() => {
@@ -127,9 +126,16 @@ export default function ItemDetailPage() {
       }
 
       // 4. Merge options into groups
+      const optionsByGroup = new Map<string, CustomizationOption[]>();
+      for (const option of fetchedOptions) {
+        const existing = optionsByGroup.get(option.group_id) ?? [];
+        existing.push(option);
+        optionsByGroup.set(option.group_id, existing);
+      }
+
       const groupsWithOptions: GroupWithOptions[] = fetchedGroups.map((g) => ({
         ...g,
-        options: fetchedOptions.filter((o) => o.group_id === g.id),
+        options: optionsByGroup.get(g.id) ?? [],
       }));
 
       setGroups(groupsWithOptions);
@@ -252,12 +258,10 @@ export default function ItemDetailPage() {
       if (validationMessage) toast.error(validationMessage);
       return;
     }
-    setDirection(1);
     setCurrentStep((s) => Math.min(s + 1, totalSteps - 1));
   };
 
   const handleBack = () => {
-    setDirection(-1);
     setCurrentStep((s) => Math.max(s - 1, 0));
   };
 
@@ -290,22 +294,6 @@ export default function ItemDetailPage() {
 
     toast.success(`${item.name} added to cart!`);
     router.back();
-  };
-
-  // Animation variants for step transitions
-  const slideVariants = {
-    enter: (dir: number) => ({
-      x: dir > 0 ? 300 : -300,
-      opacity: 0,
-    }),
-    center: {
-      x: 0,
-      opacity: 1,
-    },
-    exit: (dir: number) => ({
-      x: dir > 0 ? -300 : 300,
-      opacity: 0,
-    }),
   };
 
   if (loading) {
@@ -357,10 +345,13 @@ export default function ItemDetailPage() {
         {/* Image */}
         <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-white border border-brand-gray-200">
           {item.image_url ? (
-            <img
+            <Image
               src={getImageUrl(item.image_url) ?? ""}
               alt={item.name}
-              className="w-full h-full object-cover"
+              fill
+              priority
+              sizes="(max-width: 768px) 100vw, 768px"
+              className="object-cover"
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#FFF8E7] to-[#F5B731]/20">
@@ -467,94 +458,74 @@ export default function ItemDetailPage() {
             ))}
           </div>
 
-          {/* Step content with animation */}
+          {/* Step content */}
           <div className="relative overflow-hidden min-h-[200px]">
-            <AnimatePresence initial={false} custom={direction} mode="wait">
-              {!isSummaryStep ? (
-                <motion.div
-                  key={currentStep}
-                  custom={direction}
-                  variants={slideVariants}
-                  initial="enter"
-                  animate="center"
-                  exit="exit"
-                  transition={{ duration: 0.25, ease: "easeInOut" }}
-                >
-                  {currentStepGroups.map((group) => (
-                    <div key={group.id} className="mb-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="font-[family-name:var(--font-heading)] text-[#1A1A1A] font-semibold text-base">
-                          {group.name}
-                        </h3>
-                        <span className="text-xs font-[family-name:var(--font-body)] text-[#1A1A1A]/50">
-                          {group.is_required ? "Required" : "Optional"}
-                          {group.max_select > 1 &&
-                            ` \u00b7 Pick ${group.min_select}${group.min_select !== group.max_select ? `-${group.max_select}` : ""}`}
-                          {group.max_select === 1 && " \u00b7 Pick 1"}
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        {group.options.map((option) => {
-                          const isSelected =
-                            selections[group.id]?.has(option.id) ?? false;
-                          return (
-                            <button
-                              key={option.id}
-                              onClick={() => toggleOption(group, option.id)}
-                              className={cn(
-                                "relative flex flex-col items-start p-3 rounded-xl border-2 transition-all text-left",
-                                isSelected
-                                  ? "border-[#F5B731] bg-[#F5B731]/10 shadow-sm"
-                                  : "border-[#1A1A1A]/10 bg-white"
-                              )}
-                            >
-                              {isSelected && (
-                                <div className="absolute top-2 right-2 w-5 h-5 bg-[#F5B731] rounded-full flex items-center justify-center">
-                                  <Check className="w-3 h-3 text-[#1A1A1A]" />
-                                </div>
-                              )}
-                              <span className="font-[family-name:var(--font-body)] text-[#1A1A1A] font-semibold text-sm pr-6">
-                                {option.name}
-                              </span>
-                              {option.price > 0 && (
-                                <span className="font-[family-name:var(--font-body)] text-[#1A1A1A]/50 text-xs mt-0.5">
-                                  +{formatCurrency(option.price)}
-                                </span>
-                              )}
-                              {option.price === 0 && (
-                                <span className="font-[family-name:var(--font-body)] text-[#4CAF50] text-xs mt-0.5">
-                                  Included
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
+            {!isSummaryStep ? (
+              <div key={currentStep}>
+                {currentStepGroups.map((group) => (
+                  <div key={group.id} className="mb-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-[family-name:var(--font-heading)] text-[#1A1A1A] font-semibold text-base">
+                        {group.name}
+                      </h3>
+                      <span className="text-xs font-[family-name:var(--font-body)] text-[#1A1A1A]/50">
+                        {group.is_required ? "Required" : "Optional"}
+                        {group.max_select > 1 &&
+                          ` \u00b7 Pick ${group.min_select}${group.min_select !== group.max_select ? `-${group.max_select}` : ""}`}
+                        {group.max_select === 1 && " \u00b7 Pick 1"}
+                      </span>
                     </div>
-                  ))}
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="summary"
-                  custom={direction}
-                  variants={slideVariants}
-                  initial="enter"
-                  animate="center"
-                  exit="exit"
-                  transition={{ duration: 0.25, ease: "easeInOut" }}
-                >
-                  <SummaryView
-                    item={item}
-                    groups={groups}
-                    selections={selections}
-                    quantity={quantity}
-                    setQuantity={setQuantity}
-                    runningTotal={runningTotal}
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      {group.options.map((option) => {
+                        const isSelected =
+                          selections[group.id]?.has(option.id) ?? false;
+                        return (
+                          <button
+                            key={option.id}
+                            onClick={() => toggleOption(group, option.id)}
+                            className={cn(
+                              "relative flex flex-col items-start p-3 rounded-xl border-2 transition-all text-left",
+                              isSelected
+                                ? "border-[#F5B731] bg-[#F5B731]/10 shadow-sm"
+                                : "border-[#1A1A1A]/10 bg-white"
+                            )}
+                          >
+                            {isSelected && (
+                              <div className="absolute top-2 right-2 w-5 h-5 bg-[#F5B731] rounded-full flex items-center justify-center">
+                                <Check className="w-3 h-3 text-[#1A1A1A]" />
+                              </div>
+                            )}
+                            <span className="font-[family-name:var(--font-body)] text-[#1A1A1A] font-semibold text-sm pr-6">
+                              {option.name}
+                            </span>
+                            {option.price > 0 && (
+                              <span className="font-[family-name:var(--font-body)] text-[#1A1A1A]/50 text-xs mt-0.5">
+                                +{formatCurrency(option.price)}
+                              </span>
+                            )}
+                            {option.price === 0 && (
+                              <span className="font-[family-name:var(--font-body)] text-[#4CAF50] text-xs mt-0.5">
+                                Included
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <SummaryView
+                item={item}
+                groups={groups}
+                selections={selections}
+                quantity={quantity}
+                setQuantity={setQuantity}
+                runningTotal={runningTotal}
+              />
+            )}
           </div>
 
           {/* Navigation buttons */}

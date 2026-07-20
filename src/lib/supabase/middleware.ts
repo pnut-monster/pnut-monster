@@ -1,6 +1,28 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+const PUBLIC_PATHS = [
+  "/login",
+  "/register",
+  "/verify",
+  "/forgot-password",
+  "/reset-password",
+  "/auth/callback",
+  "/restaurant/login",
+  "/admin/login",
+];
+
+const PUBLIC_CUSTOMER_PATHS = ["/outlets", "/menu", "/search", "/cart"];
+const PROTECTED_CUSTOMER_PATHS = [
+  "/orders",
+  "/wallet",
+  "/loyalty",
+  "/profile",
+  "/notifications",
+  "/referral",
+  "/checkout",
+];
+
 function createSupabaseMiddlewareClient(
   request: NextRequest,
   storageKey: string
@@ -36,38 +58,39 @@ function createSupabaseMiddlewareClient(
 
 export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const matchesPath = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
+  const matchesPath = (path: string) =>
+    pathname === path || pathname.startsWith(`${path}/`);
 
   const isAdminRoute = matchesPath("/admin");
-  const storageKey = isAdminRoute ? "sb-admin-auth-token" : "sb-customer-auth-token";
-
-  const { supabase, getResponse } = createSupabaseMiddlewareClient(request, storageKey);
-
-  // Public paths — no auth needed
-  const publicPaths = [
-    "/login", "/register", "/verify", "/forgot-password",
-    "/reset-password", "/auth/callback", "/restaurant/login",
-    "/admin/login",
-  ];
-  if (publicPaths.some(matchesPath)) {
-    await supabase.auth.getUser();
-    return getResponse();
-  }
-
-  // Public customer pages — no auth needed (homepage, outlets, menu, search, cart)
-  const publicCustomerPaths = ["/outlets", "/menu", "/search", "/cart"];
+  const isRestaurantRoute = matchesPath("/restaurant");
+  const isProtectedCustomerRoute = PROTECTED_CUSTOMER_PATHS.some(matchesPath);
   const isHomepage = pathname === "/";
-  if (isHomepage || publicCustomerPaths.some(matchesPath)) {
-    await supabase.auth.getUser();
-    return getResponse();
+
+  if (
+    PUBLIC_PATHS.some(matchesPath) ||
+    isHomepage ||
+    PUBLIC_CUSTOMER_PATHS.some(matchesPath)
+  ) {
+    return NextResponse.next({ request });
   }
+
+  if (!isAdminRoute && !isRestaurantRoute && !isProtectedCustomerRoute) {
+    return NextResponse.next({ request });
+  }
+
+  const storageKey = isAdminRoute
+    ? "sb-admin-auth-token"
+    : "sb-customer-auth-token";
+  const { supabase, getResponse } = createSupabaseMiddlewareClient(
+    request,
+    storageKey
+  );
 
   try {
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    // Admin routes — require admin/super_admin role
     if (isAdminRoute) {
       if (!user) {
         const url = request.nextUrl.clone();
@@ -91,8 +114,7 @@ export async function updateSession(request: NextRequest) {
       return getResponse();
     }
 
-    // Restaurant routes — require outlet_staff/admin/super_admin role
-    if (matchesPath("/restaurant")) {
+    if (isRestaurantRoute) {
       if (!user) {
         const url = request.nextUrl.clone();
         url.pathname = "/restaurant/login";
@@ -106,7 +128,10 @@ export async function updateSession(request: NextRequest) {
         .eq("id", user.id)
         .single();
 
-      if (!profile || !["outlet_staff", "admin", "super_admin"].includes(profile.role)) {
+      if (
+        !profile ||
+        !["outlet_staff", "admin", "super_admin"].includes(profile.role)
+      ) {
         const url = request.nextUrl.clone();
         url.pathname = "/restaurant/login";
         return NextResponse.redirect(url);
@@ -115,22 +140,20 @@ export async function updateSession(request: NextRequest) {
       return getResponse();
     }
 
-    // Protected customer routes — require any authenticated user
-    const protectedPaths = ["/orders", "/wallet", "/loyalty", "/profile", "/notifications", "/referral", "/checkout"];
-    if (protectedPaths.some(matchesPath) && !user) {
+    if (isProtectedCustomerRoute && !user) {
       const url = request.nextUrl.clone();
       url.pathname = "/login";
       url.searchParams.set("redirect", pathname);
       return NextResponse.redirect(url);
     }
   } catch {
-    // Supabase unreachable — redirect to login for protected routes
-    const protectedPrefixes = ["/admin", "/restaurant", "/orders", "/wallet", "/loyalty", "/profile", "/notifications", "/referral", "/checkout"];
-    if (protectedPrefixes.some(matchesPath)) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/login";
-      return NextResponse.redirect(url);
-    }
+    const url = request.nextUrl.clone();
+    url.pathname = isAdminRoute
+      ? "/admin/login"
+      : isRestaurantRoute
+        ? "/restaurant/login"
+        : "/login";
+    return NextResponse.redirect(url);
   }
 
   return getResponse();

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -103,7 +104,14 @@ export default function RestaurantLoginPage() {
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <img src="/logo.webp" alt="PNUT MONSTER" className="w-24 h-24 mx-auto mb-2 object-contain" />
+          <Image
+            src="/logo.webp"
+            alt="PNUT MONSTER"
+            width={96}
+            height={96}
+            priority
+            className="mx-auto mb-2 object-contain"
+          />
           <h1 className="font-heading text-xl font-bold text-brand-black">
             Restaurant Panel
           </h1>

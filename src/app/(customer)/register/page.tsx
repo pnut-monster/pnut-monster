@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Mail, Lock, User, ArrowRight, Loader2, Eye, EyeOff, Phone, CheckSquare, Square } from "lucide-react";
@@ -87,7 +88,14 @@ export default function RegisterPage() {
     <div className="min-h-dvh bg-[#FAFBFC] flex flex-col">
       {/* Top section with brand */}
       <div className="flex-shrink-0 pt-10 pb-4 px-6 text-center">
-        <img src="/logo.webp" alt="PNUT MONSTER" className="w-24 h-24 mx-auto mb-1 object-contain" />
+        <Image
+          src="/logo.webp"
+          alt="PNUT MONSTER"
+          width={96}
+          height={96}
+          priority
+          className="mx-auto mb-1 object-contain"
+        />
         <p className="text-brand-gray-500 mt-1 text-sm">Healthy never tasted this fun!</p>
       </div>
 

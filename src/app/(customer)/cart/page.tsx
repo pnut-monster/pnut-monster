@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
@@ -18,9 +18,26 @@ import { formatCurrency } from "@/lib/utils/helpers";
 import type { Coupon } from "@/lib/supabase/types";
 import toast from "react-hot-toast";
 
+type ExtendedCoupon = Coupon & {
+  name?: string | null;
+  discount_type_ext?: string | null;
+  min_cart_value?: number | null;
+  per_user_limit?: number | null;
+  daily_limit?: number | null;
+  priority?: number | null;
+  status?: string | null;
+  customer_eligibility?: string | null;
+  buy_x_qty?: number | null;
+  get_y_qty?: number | null;
+  free_product_id?: string | null;
+  applicable_type?: string | null;
+  applicable_product_ids?: string[] | null;
+  applicable_category_ids?: string[] | null;
+};
 
 export default function CartPage() {
   const router = useRouter();
+  const couponRequestSeqRef = useRef(0);
   const {
     items,
     coupon_code,
@@ -31,7 +48,6 @@ export default function CartPage() {
     setCoupon,
     setNotes,
     getSubtotal,
-    getItemCount,
   } = useCartStore();
 
   const { selectedOutlet } = useOutletStore();
@@ -39,9 +55,32 @@ export default function CartPage() {
   const [couponInput, setCouponInput] = useState(coupon_code ?? "");
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState<string | null>(null);
+  const [availableCoupons, setAvailableCoupons] = useState<ExtendedCoupon[]>([]);
+  const [couponsLoaded, setCouponsLoaded] = useState(false);
   const [taxRate, setTaxRate] = useState(0.05);
   const [packagingCharge, setPackagingCharge] = useState(10);
   const [packagingMode, setPackagingMode] = useState<"per_order" | "per_item">("per_order");
+
+  const subtotal = getSubtotal();
+  const discount = coupon_discount;
+  const taxableAmount = subtotal - discount;
+  const tax = Math.round(taxableAmount * taxRate * 100) / 100;
+  const itemCount = useMemo(
+    () => items.reduce((sum, item) => sum + item.quantity, 0),
+    [items]
+  );
+  const couponItems = useMemo(
+    () =>
+      items.map((item) => ({
+        item_id: item.item_id,
+        quantity: item.quantity,
+      })),
+    [items]
+  );
+  const packaging = items.length > 0
+    ? (packagingMode === "per_item" ? packagingCharge * itemCount : packagingCharge)
+    : 0;
+  const total = taxableAmount + tax + packaging;
 
   useEffect(() => {
     async function loadSettings() {
@@ -61,18 +100,62 @@ export default function CartPage() {
     loadSettings();
   }, []);
 
-  const subtotal = getSubtotal();
-  const discount = coupon_discount;
-  const taxableAmount = subtotal - discount;
-  const tax = Math.round(taxableAmount * taxRate * 100) / 100;
-  const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
-  const packaging = items.length > 0
-    ? (packagingMode === "per_item" ? packagingCharge * itemCount : packagingCharge)
-    : 0;
-  const total = taxableAmount + tax + packaging;
+  useEffect(() => {
+    const requestSeq = couponRequestSeqRef.current + 1;
+    couponRequestSeqRef.current = requestSeq;
 
-  const handleApplyCoupon = async () => {
-    const code = couponInput.trim().toUpperCase();
+    const timer = setTimeout(() => {
+      async function loadCoupons() {
+        setCouponsLoaded(false);
+        try {
+          const response = await fetch("/api/coupons/eligible", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              subtotal,
+              outlet_id: selectedOutlet?.id ?? null,
+              items: couponItems,
+            }),
+          });
+
+          if (couponRequestSeqRef.current !== requestSeq) return;
+          if (!response.ok) {
+            setAvailableCoupons([]);
+            setCouponsLoaded(true);
+            return;
+          }
+
+          const data = (await response.json()) as { coupons?: ExtendedCoupon[] };
+          if (couponRequestSeqRef.current !== requestSeq) return;
+          setAvailableCoupons(data.coupons ?? []);
+        } catch (err) {
+          if (couponRequestSeqRef.current !== requestSeq) return;
+          console.error("Failed to load eligible coupons:", err);
+          setAvailableCoupons([]);
+        } finally {
+          if (couponRequestSeqRef.current !== requestSeq) return;
+          setCouponsLoaded(true);
+        }
+      }
+
+      loadCoupons();
+    }, 150);
+
+    return () => clearTimeout(timer);
+  }, [couponItems, selectedOutlet?.id, subtotal]);
+
+  useEffect(() => {
+    if (!couponsLoaded || !coupon_code) return;
+    const stillEligible = availableCoupons.some((coupon) => coupon.code === coupon_code);
+    if (!stillEligible) {
+      setCoupon(null, 0);
+      setCouponInput("");
+      setCouponError(null);
+    }
+  }, [availableCoupons, coupon_code, couponsLoaded, setCoupon]);
+
+  const handleApplyCoupon = async (selectedCode?: string) => {
+    const code = (selectedCode ?? couponInput).trim().toUpperCase();
     if (!code) {
       setCouponError("Enter a coupon code");
       return;
@@ -81,53 +164,30 @@ export default function CartPage() {
     setCouponLoading(true);
     setCouponError(null);
 
-    let coupon: Coupon | null = null;
+    let coupon: ExtendedCoupon | null = null;
 
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from("coupons")
-        .select("*")
-        .eq("code", code)
-        .eq("is_active", true)
-        .single();
-
-      if (error || !data) {
-        coupon = null;
-      } else {
-        coupon = data as Coupon;
-      }
+      const response = await fetch("/api/coupons/eligible", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code,
+          subtotal,
+          outlet_id: selectedOutlet?.id ?? null,
+          items: couponItems,
+        }),
+      });
+      const data = response.ok
+        ? ((await response.json()) as { coupons?: ExtendedCoupon[] })
+        : { coupons: [] };
+      coupon = data.coupons?.[0] ?? null;
     } catch (err) {
       console.error("Failed to validate coupon:", err);
       coupon = null;
     }
 
     if (!coupon) {
-      setCouponError("Invalid coupon code");
-      setCoupon(null, 0);
-      setCouponLoading(false);
-      return;
-    }
-
-    const now = new Date().toISOString();
-    if (now < coupon.starts_at || now > coupon.ends_at) {
-      setCouponError("This coupon has expired");
-      setCoupon(null, 0);
-      setCouponLoading(false);
-      return;
-    }
-
-    if (coupon.usage_limit && coupon.used_count >= coupon.usage_limit) {
-      setCouponError("This coupon has reached its usage limit");
-      setCoupon(null, 0);
-      setCouponLoading(false);
-      return;
-    }
-
-    if (subtotal < coupon.min_order) {
-      setCouponError(
-        `Minimum order of ${formatCurrency(coupon.min_order)} required`
-      );
+      setCouponError("Invalid coupon code or not eligible for this cart");
       setCoupon(null, 0);
       setCouponLoading(false);
       return;
@@ -145,6 +205,7 @@ export default function CartPage() {
 
     discountAmount = Math.min(discountAmount, subtotal);
 
+    setCouponInput(code);
     setCoupon(code, discountAmount);
     toast.success(`Coupon applied! You save ${formatCurrency(discountAmount)}`);
     setCouponLoading(false);
@@ -200,7 +261,7 @@ export default function CartPage() {
           <div className="flex-1">
             <p className="text-[10px] font-bold text-brand-gray-500 uppercase tracking-wider">CART</p>
             <h1 className="text-lg font-bold font-[family-name:var(--font-heading)] text-brand-black">
-              Your Cart ({getItemCount()} {getItemCount() === 1 ? "item" : "items"})
+              Your Cart ({itemCount} {itemCount === 1 ? "item" : "items"})
             </h1>
           </div>
         </div>
@@ -336,11 +397,42 @@ export default function CartPage() {
                 size="sm"
                 variant="outline"
                 loading={couponLoading}
-                onClick={handleApplyCoupon}
+                onClick={() => handleApplyCoupon()}
                 className="shrink-0 self-start mt-0"
               >
                 Apply
               </Button>
+            </div>
+          )}
+
+          {availableCoupons.length > 0 && (
+            <div className="mt-4 space-y-2">
+              <p className="text-[10px] font-bold text-brand-gray-500 uppercase tracking-wider">
+                Available Coupons
+              </p>
+              {availableCoupons.map((coupon) => (
+                <div
+                  key={coupon.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-brand-gray-200 bg-brand-gray-50 px-3 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-brand-black">{coupon.code}</p>
+                    <p className="text-xs text-brand-gray-600 truncate">{coupon.description}</p>
+                    <p className="text-[11px] text-brand-gray-500">
+                      Min order {formatCurrency(coupon.min_order)}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={coupon_code === coupon.code ? "primary" : "outline"}
+                    disabled={coupon_code === coupon.code}
+                    onClick={() => handleApplyCoupon(coupon.code)}
+                    className="shrink-0"
+                  >
+                    {coupon_code === coupon.code ? "Applied" : "Apply"}
+                  </Button>
+                </div>
+              ))}
             </div>
           )}
         </Card>

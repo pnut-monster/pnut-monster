@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { MenuItem } from "@/lib/supabase/types";
@@ -16,7 +17,6 @@ import {
   Clock,
   TrendingUp,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 
 const POPULAR_SEARCHES = [
   "Sprouts",
@@ -65,9 +65,14 @@ function clearRecentSearches() {
   }
 }
 
+function escapeIlikePattern(value: string) {
+  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
 export default function SearchPage() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchSeqRef = useRef(0);
 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MenuItem[]>([]);
@@ -87,13 +92,14 @@ export default function SearchPage() {
   useEffect(() => {
     const trimmed = query.trim();
     if (trimmed.length < 2) {
-      setResults([]);
-      setHasSearched(false);
+      searchSeqRef.current += 1;
       return;
     }
 
-    setLoading(true);
+    const searchSeq = searchSeqRef.current + 1;
+    searchSeqRef.current = searchSeq;
     const timer = setTimeout(async () => {
+      setLoading(true);
       let items: MenuItem[] = [];
       try {
         const supabase = createClient();
@@ -102,7 +108,9 @@ export default function SearchPage() {
           .from("menu_items")
           .select("*")
           .eq("is_active", true)
-          .or(`name.ilike.%${trimmed}%,description.ilike.%${trimmed}%`)
+          .or(
+            `name.ilike.%${escapeIlikePattern(trimmed)}%,description.ilike.%${escapeIlikePattern(trimmed)}%`
+          )
           .order("is_bestseller", { ascending: false })
           .limit(20);
 
@@ -111,6 +119,7 @@ export default function SearchPage() {
         console.error("Failed to search:", err);
       }
 
+      if (searchSeqRef.current !== searchSeq) return;
       setResults(items);
       setHasSearched(true);
       setLoading(false);
@@ -141,6 +150,7 @@ export default function SearchPage() {
   }, []);
 
   const handleClearQuery = useCallback(() => {
+    searchSeqRef.current += 1;
     setQuery("");
     setResults([]);
     setHasSearched(false);
@@ -167,7 +177,16 @@ export default function SearchPage() {
               ref={inputRef}
               type="text"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                const nextQuery = e.target.value;
+                setQuery(nextQuery);
+                if (nextQuery.trim().length < 2) {
+                  searchSeqRef.current += 1;
+                  setResults([]);
+                  setHasSearched(false);
+                  setLoading(false);
+                }
+              }}
               placeholder="Search sprouts, drinks, bowls..."
               className="w-full pl-10 pr-10 py-2.5 bg-white rounded-xl border-2 border-[#1A1A1A]/10 focus:border-[#F5B731] outline-none font-[family-name:var(--font-body)] text-[#1A1A1A] text-sm placeholder:text-[#1A1A1A]/30 transition-colors"
             />
@@ -255,23 +274,15 @@ export default function SearchPage() {
               <p className="font-[family-name:var(--font-body)] text-[#1A1A1A]/50 text-xs mb-3">
                 {results.length} result{results.length !== 1 ? "s" : ""} found
               </p>
-              <AnimatePresence>
-                <div className="space-y-3">
-                  {results.map((item, index) => (
-                    <motion.div
-                      key={item.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.05, duration: 0.2 }}
-                    >
-                      <SearchResultCard
-                        item={item}
-                        onClick={() => handleSelectItem(item)}
-                      />
-                    </motion.div>
-                  ))}
-                </div>
-              </AnimatePresence>
+              <div className="space-y-3">
+                {results.map((item) => (
+                  <SearchResultCard
+                    key={item.id}
+                    item={item}
+                    onClick={() => handleSelectItem(item)}
+                  />
+                ))}
+              </div>
             </>
           ) : (
             /* Empty State */
@@ -306,12 +317,14 @@ function SearchResultCard({
       className="w-full flex items-center gap-3 bg-white rounded-xl p-3 shadow-sm text-left"
     >
       {/* Image */}
-      <div className="w-16 h-16 rounded-lg overflow-hidden bg-[#FFF8E7] flex-shrink-0">
+      <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-[#FFF8E7] flex-shrink-0">
         {item.image_url ? (
-          <img
+          <Image
             src={getImageUrl(item.image_url) ?? ""}
             alt={item.name}
-            className="w-full h-full object-cover"
+            fill
+            sizes="64px"
+            className="object-cover"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
