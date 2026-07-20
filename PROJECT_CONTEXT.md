@@ -479,6 +479,29 @@ Future sessions must not revert these without explicit user instruction.
 
 ## Change Log
 
+## 2026-07-20
+
+### Added
+
+- Added OpenNext Cloudflare Workers deployment support with `wrangler.jsonc`,
+  `open-next.config.ts`, Node 22 pinning, npm build/preview/deploy scripts, and a
+  Cloudflare deployment runbook.
+- Made `.env.example` trackable while keeping real environment files ignored.
+
+### Updated
+
+- Added `@opennextjs/cloudflare` and `wrangler` development dependencies.
+- Confirmed the standard Next.js production build passes on Next.js 15.5.20
+  with four existing lint warnings.
+
+### Known Deployment Limitation
+
+- Local OpenNext adaptation is blocked by a broken Windows `@ast-grep/napi`
+  native binding in the current npm installation. Cloudflare Linux CI installs
+  its own platform binary.
+- `/api/upload` imports native `sharp`, which is not compatible with the
+  Cloudflare Workers runtime and must be replaced or hosted on a Node service.
+
 ## 2026-07-16
 
 ### Added
