@@ -4,10 +4,12 @@ import Razorpay from "razorpay";
 import { createClient } from "@supabase/supabase-js";
 import { sendEmail, walletTopupEmail } from "@/lib/email";
 
-const razorpay = new Razorpay({
-  key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!,
-  key_secret: process.env.RAZORPAY_KEY_SECRET!,
-});
+function createRazorpayClient() {
+  const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  if (!keyId || !keySecret) throw new Error("Razorpay credentials are not configured");
+  return new Razorpay({ key_id: keyId, key_secret: keySecret });
+}
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const MAX_REQUESTS_PER_WINDOW = 20;
@@ -109,7 +111,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Minimum top-up is ₹1" }, { status: 400 });
       }
 
-      const order = await razorpay.orders.create({
+      const order = await createRazorpayClient().orders.create({
         amount: Math.round(amount * 100),
         currency: "INR",
         receipt: `wallet_${Date.now()}`,
@@ -137,6 +139,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Payment verification failed" }, { status: 400 });
       }
 
+      const razorpay = createRazorpayClient();
       const [payment, order] = await Promise.all([
         razorpay.payments.fetch(razorpay_payment_id),
         razorpay.orders.fetch(razorpay_order_id),

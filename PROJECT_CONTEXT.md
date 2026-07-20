@@ -495,6 +495,8 @@ Future sessions must not revert these without explicit user instruction.
   package manager so Cloudflare Git builds install with `npm ci`.
 - Confirmed the standard Next.js production build passes on Next.js 15.5.20
   with four existing lint warnings.
+- Configured the ignored local environment to use the production Supabase
+  project credentials and Razorpay test credentials; no secrets are tracked.
 
 ### Known Deployment Limitation
 
