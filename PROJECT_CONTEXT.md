@@ -481,6 +481,28 @@ Future sessions must not revert these without explicit user instruction.
 
 ## 2026-07-20
 
+### Audited
+
+- Completed a deep whole-codebase audit covering all current source files, API
+  routes, 41 Supabase migrations, RLS/RPC authorization, payments, uploads,
+  customer/admin/restaurant flows, deployment, dependencies, and operations.
+- Added `docs/codebase-deep-audit-2026-07-20.md` with prioritized evidence and
+  remediation guidance.
+- Confirmed `npm run lint` passes with 4 warnings, `npm run build` passes, and
+  `npm audit --omit=dev` reports zero known production dependency vulnerabilities.
+- Identified a critical direct-RLS admin-to-super-admin privilege escalation.
+- Identified high-risk server-side checkout gaps for customization constraints,
+  extended coupon eligibility, manual outlet closure, and loyalty redemption
+  limits, plus Razorpay authorized-payment handling and missing webhook recovery.
+
+### Fixed
+
+- Added migration `20240101000042_super_admin_role_boundary.sql` to close the
+  critical direct-RLS privilege escalation: ordinary admins can no longer grant,
+  remove, or modify `admin`/`super_admin` roles by bypassing the admin API.
+- Preserved ordinary admin management of `customer` and `outlet_staff` roles,
+  super-admin elevated-role management, and trusted service-role provisioning.
+
 ### Added
 
 - Added OpenNext Cloudflare Workers deployment support with `wrangler.jsonc`,
@@ -490,6 +512,8 @@ Future sessions must not revert these without explicit user instruction.
 
 ### Updated
 
+- Routed apex traffic matching `pnut.monster/*` to the `pnut-monster`
+  Cloudflare Worker while retaining the existing proxied DNS record.
 - Added `@opennextjs/cloudflare` and `wrangler` development dependencies.
 - Removed the conflicting legacy `yarn.lock` and declared npm 10.9.2 as the
   package manager so Cloudflare Git builds install with `npm ci`.
