@@ -491,6 +491,8 @@ Future sessions must not revert these without explicit user instruction.
 ### Updated
 
 - Added `@opennextjs/cloudflare` and `wrangler` development dependencies.
+- Removed the conflicting legacy `yarn.lock` and declared npm 10.9.2 as the
+  package manager so Cloudflare Git builds install with `npm ci`.
 - Confirmed the standard Next.js production build passes on Next.js 15.5.20
   with four existing lint warnings.
 
