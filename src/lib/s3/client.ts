@@ -1,4 +1,5 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const s3 = new S3Client({
   region: process.env.AWS_S3_REGION || "ap-south-1",
@@ -9,8 +10,6 @@ const s3 = new S3Client({
 });
 
 const BUCKET = process.env.AWS_S3_BUCKET || "";
-const REGION = process.env.AWS_S3_REGION || "ap-south-1";
-const CDN_URL = process.env.NEXT_PUBLIC_CDN_URL || "";
 
 /**
  * Upload a processed buffer directly to S3
@@ -30,11 +29,15 @@ export async function uploadToS3(
     })
   );
 
-  // Return CDN URL if configured, otherwise direct S3 URL
-  if (CDN_URL) {
-    return `${CDN_URL}/${key}`;
-  }
-  return `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
+  // Keep stored URLs stable while the bucket remains private. The same-origin
+  // image route signs the S3 request server-side and never exposes credentials.
+  return `/api/images/${key}`;
+}
+
+export async function getPrivateImageUrl(key: string): Promise<string> {
+  return getSignedUrl(s3, new GetObjectCommand({ Bucket: BUCKET, Key: key }), {
+    expiresIn: 60,
+  });
 }
 
 /**

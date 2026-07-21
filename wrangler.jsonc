@@ -11,7 +11,9 @@
     "SES_FROM_EMAIL": "noreply@pnut.monster",
     "SES_FROM_NAME": "Pnut Monster",
     "AWS_EMAIL_TEMPLATE_BUCKET": "pnut-monster-assets",
-    "AWS_EMAIL_TEMPLATE_PREFIX": "email-template"
+    "AWS_EMAIL_TEMPLATE_PREFIX": "email-template",
+    "AWS_S3_BUCKET": "pnut-monster-assets",
+    "AWS_S3_REGION": "ap-south-1"
   },
   "assets": {
     "directory": ".open-next/assets",

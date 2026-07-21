@@ -14,6 +14,20 @@ const CDN_URL = process.env.NEXT_PUBLIC_CDN_URL;
 export function getImageUrl(path: string | null | undefined): string | null {
   if (!path) return null;
 
+  // Migrate previously stored URLs away from the broken custom S3 hostname
+  // and direct private-bucket URLs without requiring a database rewrite.
+  try {
+    const url = new URL(path);
+    const isAssetHost = url.hostname === "assets.pnut.monster";
+    const isPrivateBucket = /^pnut-monster-assets\.s3(?:\.[^.]+)?\.amazonaws\.com$/.test(url.hostname);
+    if (isAssetHost || isPrivateBucket) {
+      const key = url.pathname.replace(/^\/+/, "");
+      return key ? `/api/images/${key}` : null;
+    }
+  } catch {
+    // Relative paths are handled below.
+  }
+
   // Already a full URL (S3, CDN, external) or data URL
   if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:")) {
     return path;

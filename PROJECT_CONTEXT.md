@@ -513,6 +513,30 @@ Future sessions must not revert these without explicit user instruction.
 
 ### Fixed
 
+- Fixed production Supabase Auth email delivery/rate limiting. Auth was still
+  configured for a temporary Mailpit tunnel and only 2 emails/hour across the
+  entire project, so changing the recipient address did not help. Switched Auth
+  SMTP to the existing AWS SES `us-east-1` sender, raised the project-wide
+  email limit to 30/hour, and retained the 60-second per-address cooldown.
+  Verified the production Auth mail path with AWS's SES success simulator; OTP
+  delivery was accepted and the temporary Auth record was removed.
+- Added an admin-wide realtime new-order alert with a persistent sound toggle,
+  a browser-compatible three-tone notification, and an eight-second order
+  toast on every admin page. Replaced blocking admin order-operation alerts
+  with success/error toasts, and added realtime customer toasts for accepted,
+  preparing, ready, completed, cancelled, and rejected order transitions.
+- Fixed private S3 images uploading successfully but failing to render in both
+  development and production. The configured `assets.pnut.monster` hostname
+  returned Cloudflare HTTP 525, while direct bucket URLs correctly returned
+  HTTP 403 because `pnut-monster-assets` is private. Uploads now store stable
+  same-origin `/api/images/<key>` URLs, and a restricted image route signs and
+  streams allowed image keys from S3 without exposing AWS credentials. The URL
+  resolver transparently maps previously stored custom-domain and direct-S3
+  URLs to the new route, so no database rewrite is required. Added production
+  `AWS_S3_BUCKET` and `AWS_S3_REGION` bindings and deployed Cloudflare Worker
+  version `9a6cddf2-d8a2-4d38-bdd5-adf6ae207468`. A real uploaded WebP was
+  verified in production and localhost: both returned HTTP 200, `image/webp`,
+  and 10,516 bytes.
 - Completed the production rollout for SES and the current security/payment
   worktree. Added Worker variables for SES `us-east-1`, S3 templates in
   `ap-south-1`, sender `Pnut Monster <noreply@pnut.monster>`, bucket

@@ -20,6 +20,7 @@ import {
   X,
   KeyRound,
 } from "lucide-react";
+import toast from "react-hot-toast";
 
 type OrderStatus = Order["status"];
 
@@ -178,9 +179,10 @@ export function AdminOrdersClient() {
       setOrders((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
       );
+      toast.success(`Order moved to ${ORDER_STATUS_LABELS[newStatus] ?? newStatus}`);
     } catch (err) {
       console.error("Order status update failed:", err);
-      alert(err instanceof Error ? err.message : "Failed to update order status.");
+      toast.error(err instanceof Error ? err.message : "Failed to update order status.");
     } finally {
       setUpdatingId(null);
     }
@@ -195,13 +197,13 @@ export function AdminOrdersClient() {
       } as never);
 
       if (error) {
-        alert(error.message);
+        toast.error(error.message);
         setRefundingId(null);
         return;
       }
 
       const result = data as { refunded: number } | null;
-      alert(`Refunded ₹${result?.refunded ?? 0} to customer wallet.`);
+      toast.success(`Refunded ₹${result?.refunded ?? 0} to customer wallet.`);
 
       setOrders((prev) =>
         prev.map((o) =>
@@ -210,7 +212,7 @@ export function AdminOrdersClient() {
       );
     } catch (err) {
       console.error("Refund failed:", err);
-      alert("Refund failed. Please try again.");
+      toast.error("Refund failed. Please try again.");
     }
     setRefundingId(null);
   };
@@ -223,7 +225,7 @@ export function AdminOrdersClient() {
       } as never);
 
       if (error) {
-        alert(error.message);
+        toast.error(error.message);
         setUpdatingId(null);
         return;
       }
@@ -231,11 +233,11 @@ export function AdminOrdersClient() {
       const result = data as { wallet_refunded: number; online_amount: number; payment_method: string } | null;
 
       if (result && result.wallet_refunded > 0) {
-        alert(`Order rejected. ₹${result.wallet_refunded} refunded to wallet.${result.online_amount > 0 ? ` ₹${result.online_amount} online payment will need manual processing.` : ""}`);
+        toast.success(`Order rejected. ₹${result.wallet_refunded} refunded to wallet.${result.online_amount > 0 ? ` ₹${result.online_amount} online payment needs manual processing.` : ""}`, { duration: 6000 });
       } else if (result && result.online_amount > 0) {
-        alert(`Order rejected. ₹${result.online_amount} online payment will need manual processing.`);
+        toast.success(`Order rejected. ₹${result.online_amount} online payment needs manual processing.`, { duration: 6000 });
       } else {
-        alert("Order rejected and refund processed.");
+        toast.success("Order rejected and refund processed.");
       }
 
       setOrders((prev) =>
@@ -245,7 +247,7 @@ export function AdminOrdersClient() {
       );
     } catch (err) {
       console.error("Reject+refund failed:", err);
-      alert("Failed to reject order. Please try again.");
+      toast.error("Failed to reject order. Please try again.");
     }
     setUpdatingId(null);
   };
@@ -274,9 +276,10 @@ export function AdminOrdersClient() {
       setOtpModalOrder(null);
       setOtpInput("");
       setOtpError(false);
+      toast.success("Order completed successfully");
     } catch (err) {
       console.error("Pickup completion failed:", err);
-      alert(err instanceof Error ? err.message : "Failed to complete pickup.");
+      toast.error(err instanceof Error ? err.message : "Failed to complete pickup.");
     } finally {
       setUpdatingId(null);
     }
@@ -301,9 +304,10 @@ export function AdminOrdersClient() {
       } as never);
       if (error) throw error;
       setOtpRequired(newValue);
+      toast.success(`Pickup OTP ${newValue ? "enabled" : "disabled"}`);
     } catch (err) {
       console.error("OTP setting update failed:", err);
-      alert(err instanceof Error ? err.message : "Failed to update OTP setting.");
+      toast.error(err instanceof Error ? err.message : "Failed to update OTP setting.");
     }
   };
 

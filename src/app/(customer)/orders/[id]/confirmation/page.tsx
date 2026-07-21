@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Check, Clock, ShoppingBag, XCircle, CheckCircle } from "lucide-react";
 import { Button, Card, Spinner } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils/helpers";
 import type { Order, OrderItem } from "@/lib/supabase/types";
+import toast from "react-hot-toast";
 
 type OrderConfirmationRow = Order & {
   order_items: OrderItem[] | null;
@@ -25,6 +26,7 @@ export default function OrderConfirmationPage() {
   const [order, setOrder] = useState<Order | null>(null);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const orderStatusRef = useRef<Order["status"] | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -33,6 +35,7 @@ export default function OrderConfirmationPage() {
       const cached = orderConfirmationCache.get(orderId);
       if (cached) {
         setOrder(cached.order);
+        orderStatusRef.current = cached.order.status;
         setOrderItems(cached.orderItems);
         setLoading(false);
       }
@@ -55,6 +58,7 @@ export default function OrderConfirmationPage() {
         });
 
         setOrder(fetchedOrder);
+        orderStatusRef.current = fetchedOrder.status;
         setOrderItems(fetchedItems);
       }
 
@@ -70,7 +74,16 @@ export default function OrderConfirmationPage() {
         { event: "UPDATE", schema: "public", table: "orders", filter: `id=eq.${orderId}` },
         (payload) => {
           const updated = payload.new as Order;
+          const previousStatus = orderStatusRef.current;
+          orderStatusRef.current = updated.status;
           setOrder(updated);
+          if (updated.status === previousStatus) return;
+          if (updated.status === "confirmed") toast.success("Your order was accepted!");
+          if (updated.status === "preparing") toast.success("Your order is being prepared");
+          if (updated.status === "ready") toast.success("Your order is ready for pickup!", { duration: 6000 });
+          if (updated.status === "picked_up") toast.success("Order completed. Enjoy your meal!");
+          if (updated.status === "cancelled") toast.error("Your order was cancelled", { duration: 6000 });
+          if (updated.status === "rejected") toast.error("The outlet could not accept your order", { duration: 6000 });
         }
       )
       .subscribe();
