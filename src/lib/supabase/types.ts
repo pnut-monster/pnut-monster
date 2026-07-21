@@ -332,6 +332,27 @@ export interface Database {
         Insert: Omit<Database["public"]["Tables"]["campaigns"]["Row"], "id" | "created_at">;
         Update: Partial<Database["public"]["Tables"]["campaigns"]["Insert"]>;
       };
+      customer_addresses: {
+        Row: {
+          id: string; user_id: string; label: string; recipient_name: string;
+          phone: string; address_line_1: string; address_line_2: string | null;
+          landmark: string | null; city: string; state: string; pincode: string;
+          is_default: boolean; created_at: string; updated_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["customer_addresses"]["Row"], "id" | "created_at" | "updated_at">;
+        Update: Partial<Database["public"]["Tables"]["customer_addresses"]["Insert"]>;
+      };
+      support_tickets: {
+        Row: {
+          id: string; ticket_number: string; user_id: string;
+          category: "order" | "payment" | "wallet" | "account" | "feedback" | "other";
+          subject: string; message: string;
+          status: "open" | "in_progress" | "resolved" | "closed";
+          admin_response: string | null; created_at: string; updated_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["support_tickets"]["Row"], "id" | "ticket_number" | "created_at" | "updated_at" | "admin_response"> & { admin_response?: string | null };
+        Update: Partial<Database["public"]["Tables"]["support_tickets"]["Insert"]>;
+      };
       notifications: {
         Row: {
           id: string;

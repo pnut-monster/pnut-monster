@@ -417,16 +417,14 @@ export default function AdminLoyaltyPage() {
   }, [supabase]);
 
   useEffect(() => {
-    fetchActions();
-    fetchMissions();
-    fetchPointsPct();
-    fetchReferralProgram();
-    fetchRedemptionSettings();
-    fetchAnalytics();
-    fetchLedger();
-    fetchRatings();
-    fetchNthOrderSettings();
-    fetchMembershipSettings();
+    const timer = window.setTimeout(() => {
+      void Promise.all([
+        fetchActions(), fetchMissions(), fetchPointsPct(), fetchReferralProgram(),
+        fetchRedemptionSettings(), fetchAnalytics(), fetchLedger(), fetchRatings(),
+        fetchNthOrderSettings(), fetchMembershipSettings(),
+      ]);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [fetchActions, fetchMissions, fetchPointsPct, fetchReferralProgram, fetchRedemptionSettings, fetchAnalytics, fetchLedger, fetchRatings, fetchNthOrderSettings, fetchMembershipSettings]);
 
   useEffect(() => {

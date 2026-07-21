@@ -15,6 +15,7 @@
 
 # next.js
 /.next/
+/.next-codex-validation/
 .next-*.log
 /out/
 /public/sw.js
@@ -45,6 +46,7 @@ yarn-error.log*
 # local tool/runtime state
 .claude/
 supabase/.temp/
+/db-backups/production-*
 
 # typescript
 *.tsbuildinfo

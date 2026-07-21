@@ -69,7 +69,8 @@ export default function AdminCampaignsPage() {
   }, [supabase]);
 
   useEffect(() => {
-    fetchCampaigns();
+    const timer = window.setTimeout(() => void fetchCampaigns(), 0);
+    return () => window.clearTimeout(timer);
   }, [fetchCampaigns]);
 
   const openAdd = () => {

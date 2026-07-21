@@ -1,5 +1,10 @@
 -- RLS policies allowing outlet staff to read and update orders for their assigned outlets
 
+-- Production may already contain these policies from an earlier manual rollout.
+drop policy if exists "orders: staff read outlet orders" on public.orders;
+drop policy if exists "orders: staff update outlet orders" on public.orders;
+drop policy if exists "order_items: staff read outlet order items" on public.order_items;
+
 -- Staff can read orders for their assigned outlets
 CREATE POLICY "orders: staff read outlet orders"
   ON public.orders FOR SELECT

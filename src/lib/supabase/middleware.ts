@@ -19,6 +19,9 @@ const PROTECTED_CUSTOMER_PATHS = [
   "/loyalty",
   "/profile",
   "/notifications",
+  "/addresses",
+  "/support",
+  "/about",
   "/referral",
   "/checkout",
 ];

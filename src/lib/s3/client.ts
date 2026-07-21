@@ -17,7 +17,7 @@ const CDN_URL = process.env.NEXT_PUBLIC_CDN_URL || "";
  */
 export async function uploadToS3(
   key: string,
-  body: Buffer,
+  body: Uint8Array,
   contentType: string
 ): Promise<string> {
   await s3.send(
@@ -53,9 +53,5 @@ export async function deleteFromS3(key: string): Promise<void> {
  * Check if S3 is configured
  */
 export function isS3Configured(): boolean {
-  return !!(
-    process.env.AWS_S3_BUCKET &&
-    process.env.AWS_ACCESS_KEY_ID &&
-    process.env.AWS_SECRET_ACCESS_KEY
-  );
+  return Boolean(process.env.AWS_S3_BUCKET);
 }

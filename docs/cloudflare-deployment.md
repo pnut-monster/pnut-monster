@@ -34,6 +34,7 @@ Runtime secrets:
 
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `RAZORPAY_KEY_SECRET`
+- `RAZORPAY_WEBHOOK_SECRET`
 - `AWS_S3_BUCKET`
 - `AWS_S3_REGION`
 - `AWS_ACCESS_KEY_ID`
@@ -63,7 +64,7 @@ Verify `/`, `/login`, `/admin/login`, and `/restaurant/login`, then test a
 customer login and the protected route redirects. Payment tests must use the
 matching Razorpay mode and keys.
 
-The `/api/upload` route currently imports native `sharp`. Native Node addons do
-not run in the Workers runtime, so image uploads require a Workers-compatible
-image processor or a separate Node upload service before that endpoint can be
-considered production-ready. Other pages can be deployed and tested first.
+The `/api/upload` route is Workers-compatible: the browser resizes/converts
+shared UI uploads to WebP and the API validates actual file signatures before
+S3 storage. Configure `AWS_S3_BUCKET`, `AWS_S3_REGION`, and AWS credentials as
+Worker secrets; production intentionally has no data-URL fallback.

@@ -49,6 +49,9 @@ export function createClient() {
       },
       cookieOptions: {
         name: isAdmin ? "sb-admin-auth-token" : "sb-customer-auth-token",
+        path: "/",
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
       },
     }
   );

@@ -1,0 +1,85 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "InspectEmailAccount",
+      "Effect": "Allow",
+      "Action": [
+        "ses:GetAccountSendingEnabled",
+        "ses:GetSendQuota",
+        "ses:ListIdentities",
+        "ses:GetIdentityVerificationAttributes",
+        "ses:GetIdentityDkimAttributes",
+        "ses:GetIdentityMailFromDomainAttributes",
+        "ses:DescribeConfigurationSet"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ConfigurePnutMonsterSesIdentity",
+      "Effect": "Allow",
+      "Action": [
+        "ses:VerifyDomainIdentity",
+        "ses:VerifyDomainDkim",
+        "ses:SetIdentityMailFromDomain",
+        "ses:SetIdentityNotificationTopic",
+        "ses:CreateConfigurationSet",
+        "ses:SendEmail"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DiscoverPnutMonsterHostedZone",
+      "Effect": "Allow",
+      "Action": [
+        "route53:ListHostedZonesByName",
+        "route53:ListResourceRecordSets",
+        "route53:GetChange"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "UpdatePnutMonsterDns",
+      "Effect": "Allow",
+      "Action": "route53:ChangeResourceRecordSets",
+      "Resource": "arn:aws:route53:::hostedzone/*",
+      "Condition": {
+        "ForAllValues:StringLike": {
+          "route53:ChangeResourceRecordSetsNormalizedRecordNames": [
+            "pnut.monster",
+            "mail.pnut.monster",
+            "_dmarc.pnut.monster",
+            "*.pnut.monster"
+          ],
+          "route53:ChangeResourceRecordSetsRecordTypes": ["TXT", "CNAME", "MX"]
+        }
+      }
+    },
+    {
+      "Sid": "CreateDedicatedEmailTemplateBucket",
+      "Effect": "Allow",
+      "Action": "s3:CreateBucket",
+      "Resource": "arn:aws:s3:::pnut-monster-email-templates-270485302068"
+    },
+    {
+      "Sid": "ConfigureDedicatedEmailTemplateBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetBucketLocation",
+        "s3:GetBucketVersioning",
+        "s3:PutBucketVersioning",
+        "s3:GetEncryptionConfiguration",
+        "s3:PutEncryptionConfiguration",
+        "s3:GetBucketPublicAccessBlock",
+        "s3:PutBucketPublicAccessBlock"
+      ],
+      "Resource": "arn:aws:s3:::pnut-monster-email-templates-270485302068"
+    },
+    {
+      "Sid": "ManageEmailTemplateObjects",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject"],
+      "Resource": "arn:aws:s3:::pnut-monster-email-templates-270485302068/email-templates/*"
+    }
+  ]
+}

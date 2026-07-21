@@ -65,7 +65,8 @@ Quick-service healthy food ordering with wallet payments, loyalty rewards, refer
 - State management: Zustand with persistence for cart/outlet; React local state for page workflows.
 - Validation: `zod` in admin user API.
 - Storage/media: AWS S3 through AWS SDK; optional CloudFront/custom CDN; local data URL fallback for uploads when S3 is not configured.
-- Email: AWS SES via AWS SDK; no-op skip when SES env is incomplete.
+- Email: centralized AWS SES delivery with strict S3-backed HTML templates,
+  bounded in-memory caching, configurable branding, and text fallbacks.
 - Payments: Razorpay orders/signature verification.
 - PWA/offline: Serwist service worker, web manifest, offline indicator, dev service-worker reset.
 - Build tools: npm scripts, Next.js, TypeScript, ESLint 9, Tailwind PostCSS.
@@ -87,7 +88,9 @@ Quick-service healthy food ordering with wallet payments, loyalty rewards, refer
 - `src/lib/stores`: Zustand stores for cart, selected outlet, and transient UI bottom sheet.
 - `src/lib/hooks`: shared client hooks, currently `useAuth`.
 - `src/lib/utils`: formatting, constants, image helper, slug/order utilities.
-- `src/lib/email`: SES client and transactional email templates.
+- `src/lib/email`: centralized SES client, typed template registry, safe renderer,
+  S3 template cache/invalidation, compatibility data builders, and service API.
+- `email-templates`: S3-published responsive HTML template sources and manifest.
 - `src/lib/s3`: S3 upload/delete client.
 - `supabase/migrations`: source of truth for database schema, RLS, triggers, RPCs, and hardening.
 - `supabase/seed.sql`: development seed data.
@@ -193,7 +196,7 @@ Public customer paths include `/`, `/outlets`, `/menu`, `/search`, `/cart`, and 
 - `POST /api/upload`: same-origin checked image upload. Authenticated users can upload `avatars`; `admin`/`super_admin` required for menu/categories/outlets/banners/campaigns/brand. Converts images to WebP with Sharp, enforces folder whitelist, 10 MB input limit, 25 MP pixel limit, and in-process rate limit. Uses S3 when configured; otherwise returns local data URL.
 - `DELETE /api/upload?key=...`: admin/super-admin delete for generated S3 keys only.
 - `POST /api/razorpay/create-order`: authenticated customer creates a Razorpay order for a positive amount.
-- `POST /api/razorpay/verify-payment`: verifies Razorpay signature, then calls `place_order_with_wallet` with the user's access token and sends order/payment emails fire-and-forget.
+- `POST /api/razorpay/verify-payment`: verifies Razorpay signature, then calls `place_order_with_wallet` with the user's access token and sends S3-backed order/payment emails through SES.
 - `POST /api/razorpay/wallet-topup`: action `create-order` creates top-up order; action `verify` verifies signature, calls `self_topup_wallet`, and sends wallet top-up email.
 - `POST /api/email/welcome`: sends welcome email to authenticated customer.
 - `POST /api/admin/verify-role`: validates admin cookie session and returns profile role/full name.
@@ -233,7 +236,9 @@ Public customer paths include `/`, `/outlets`, `/menu`, `/search`, `/cart`, and 
 
 ### File Uploads
 
-- Server-side multipart upload processing through Sharp and S3.
+- Cloudflare-compatible multipart uploads: the shared browser UI resizes and
+  converts images to WebP; the API validates actual file signatures and stores
+  the bytes in S3 without native Node addons.
 - Allowed upload folders: `menu`, `categories`, `outlets`, `avatars`, `banners`, `campaigns`, `brand`.
 - Next image remote patterns allow S3, CloudFront, configured PNUT asset domains, and Supabase public storage.
 
@@ -416,7 +421,9 @@ Migrations define indexes for common lookup paths: profile phone/referral/role, 
 - Razorpay: checkout orders, payment signature verification, wallet top-up.
 - AWS S3: image object storage.
 - CloudFront/custom CDN: optional asset delivery via `NEXT_PUBLIC_CDN_URL`.
-- AWS SES: transactional emails for welcome, order confirmation, payment receipt, wallet top-up.
+- AWS SES: centralized transactional delivery with configuration-set/tags support.
+- AWS S3: private runtime source of truth for 26 email-template keys; templates
+  are cached per instance with TTL, stale-on-error support, and admin invalidation.
 - Google OAuth: configured through Supabase auth config.
 - Serwist: PWA/service-worker generation.
 
@@ -483,6 +490,24 @@ Future sessions must not revert these without explicit user instruction.
 
 ### Audited
 
+- Audited the linked production Supabase project directly and added
+  `docs/supabase-production-audit-2026-07-20.md`. Production records only 14 of
+  42 repository migrations and has manually drifted objects.
+- Confirmed critical live exposure: anonymous callers can execute obsolete
+  security-definer wallet top-up, loyalty award, paid-order creation, and
+  refund/cancellation RPCs without authorization checks; direct customer order
+  inserts also remain enabled.
+- Supabase Advisors additionally report 11 mutable function search paths, weak
+  Auth controls, 156 multiple-policy performance warnings, 22 RLS init-plan
+  warnings, and 8 unindexed foreign keys. RLS is enabled on all 24 live public
+  tables, database lint passes, and operational health is otherwise clean.
+- Revalidated the deep audit against the current 50-route build and expanded
+  email/OAuth worktree; lint, production build, production dependency audit,
+  and all 26 email-template validations pass.
+- Found an OAuth post-login open redirect through backslash normalization,
+  ineffective homepage menu query links, an ignored admin outlet-order filter,
+  a hard-coded inert restaurant notification bell, and 22 staged email
+  templates without sending workflows.
 - Completed a deep whole-codebase audit covering all current source files, API
   routes, 41 Supabase migrations, RLS/RPC authorization, payments, uploads,
   customer/admin/restaurant flows, deployment, dependencies, and operations.
@@ -497,6 +522,34 @@ Future sessions must not revert these without explicit user instruction.
 
 ### Fixed
 
+- Reconciled and deployed production Supabase migrations through
+  `20240101000047` after restoring the production backup into an isolated
+  rehearsal database and successfully replaying every pending migration.
+- Closed anonymous execution of financial/order RPCs, removed direct customer
+  order inserts and broad staff order updates, fixed mutable function search
+  paths, optimized all RLS `auth.uid()` init plans, and added every missing
+  foreign-key index. Production migration history now matches the repository.
+- Added authoritative checkout validation for outlet closure, customizations,
+  coupons, and loyalty redemption, plus durable Razorpay payment attempts and
+  idempotent service-role-only finalization.
+- Added a signed Razorpay webhook handler for captured and failed payments;
+  deployment remains pending until a shared webhook secret is configured in
+  both Razorpay and Cloudflare.
+- Fixed the OAuth backslash redirect, ineffective menu/admin filter links,
+  restaurant notification placeholder, Razorpay capture-state validation, and
+  wallet top-up authentication/amount bounds.
+
+- Replaced the production `/api/upload` native `sharp` path with a Cloudflare
+  Workers-compatible flow, improved non-JSON upload errors, restricted data-URL
+  fallback to development, and allowed Cloudflare Web Analytics in CSP.
+- Replaced the profile menu's placeholder destinations with working customer
+  address management, notifications, Help & Support, and About pages.
+- Added migration `20240101000044_customer_profile_features.sql` with
+  owner-scoped RLS for saved addresses and support tickets; the linked
+  production project records migrations through `20240101000045`.
+- Customers can create/edit/delete addresses, select one default address,
+  submit categorized support tickets, view ticket status/responses, browse
+  FAQs, and contact support. Notifications retain realtime/read-state support.
 - Added migration `20240101000042_super_admin_role_boundary.sql` to close the
   critical direct-RLS privilege escalation: ordinary admins can no longer grant,
   remove, or modify `admin`/`super_admin` roles by bypassing the admin API.
@@ -505,6 +558,18 @@ Future sessions must not revert these without explicit user instruction.
 
 ### Added
 
+- Built a centralized production email service using AWS SES and private S3
+  templates with a typed 26-template registry, strict escaped variable renderer,
+  required-variable validation, plain-text alternatives, SES message tags,
+  reply-to/configuration-set support, and structured delivery results.
+- Added bounded template caching with TTL, stale-on-S3-error behavior, targeted
+  or full invalidation, cache inspection, and the protected
+  `/api/admin/email/templates/cache` endpoint.
+- Added premium responsive standard, OTP, password-reset, invoice,
+  order-confirmation, and wallet templates plus an S3 publication manifest,
+  validation/upload scripts, branding configuration, environment examples, and
+  the `docs/aws-email-service.md` AWS/IAM/DNS/operations runbook.
+
 - Added OpenNext Cloudflare Workers deployment support with `wrangler.jsonc`,
   `open-next.config.ts`, Node 22 pinning, npm build/preview/deploy scripts, and a
   Cloudflare deployment runbook.
@@ -512,6 +577,20 @@ Future sessions must not revert these without explicit user instruction.
 
 ### Updated
 
+- Final validation passes: zero-warning ESLint, `tsc --noEmit`, and an isolated
+  full production build generating all 56 routes. `NEXT_DIST_DIR` can now be
+  used for collision-free validation builds.
+- Production Supabase Auth now requires 10-character passwords and
+  reauthentication for password changes. Leaked-password protection and
+  session time limits remain unavailable on the current Supabase plan.
+- Cloudflare currently reports no encrypted Worker secrets, and the local
+  environment has no `RAZORPAY_WEBHOOK_SECRET`; do not deploy the webhook until
+  Razorpay and Cloudflare are configured with the same generated secret.
+
+- Migrated welcome, order confirmation, payment receipt, and wallet top-up
+  callers from inline HTML to awaited S3-backed SES delivery.
+- Confirmed all 26 template keys validate, TypeScript passes, lint passes with
+  the same 4 existing warnings, and the 50-route production build passes.
 - Routed apex traffic matching `pnut.monster/*` to the `pnut-monster`
   Cloudflare Worker while retaining the existing proxied DNS record.
 - Added `@opennextjs/cloudflare` and `wrangler` development dependencies.
@@ -527,8 +606,22 @@ Future sessions must not revert these without explicit user instruction.
 - Local OpenNext adaptation is blocked by a broken Windows `@ast-grep/napi`
   native binding in the current npm installation. Cloudflare Linux CI installs
   its own platform binary.
-- `/api/upload` imports native `sharp`, which is not compatible with the
-  Cloudflare Workers runtime and must be replaced or hosted on a Node service.
+- The Workers-compatible upload source passes the standard production build,
+  but local OpenNext adaptation remains blocked by the Windows build sandbox;
+  Cloudflare Linux CI must build and deploy it.
+
+## 2026-07-20 — Full audit and documentation release
+
+### Updated
+
+- Added `docs/architecture.md` as the canonical production architecture,
+  route/API, data, integration, dependency, configuration, and operations map.
+- Verified exact linked-production parity across all 47 Supabase migrations.
+- Refreshed schema-only production exports for `public` and `auth`; no user or
+  business data was included.
+- Updated README, database manifests, and the deep-audit remediation status.
+- Excluded generated validation output and raw production reconciliation
+  backups from Git tracking.
 
 ## 2026-07-16
 

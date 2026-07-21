@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Order, Profile } from "@/lib/supabase/types";
 import { formatCurrency, cn } from "@/lib/utils/helpers";
@@ -72,6 +73,8 @@ function timeSince(dateStr: string): string {
 }
 
 export function AdminOrdersClient() {
+  const searchParams = useSearchParams();
+  const outletFilter = searchParams.get("outlet");
   const [orders, setOrders] = useState<OrderWithProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("all");
@@ -86,10 +89,11 @@ export function AdminOrdersClient() {
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("orders")
-        .select("*, profiles!orders_user_id_fkey(full_name, phone)")
-        .order("created_at", { ascending: false });
+        .select("*, profiles!orders_user_id_fkey(full_name, phone)");
+      if (outletFilter) query = query.eq("outlet_id", outletFilter);
+      const { data, error } = await query.order("created_at", { ascending: false });
 
       if (error) throw error;
 
@@ -122,7 +126,7 @@ export function AdminOrdersClient() {
       console.error("Failed to fetch orders:", err);
     }
     setLoading(false);
-  }, [supabase]);
+  }, [outletFilter, supabase]);
 
   useEffect(() => {
     fetchOrders();

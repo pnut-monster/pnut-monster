@@ -1,80 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
-import sharp from "sharp";
 import { uploadToS3, deleteFromS3, isS3Configured } from "@/lib/s3/client";
 import { createClient } from "@/lib/supabase/server";
 
 const ALLOWED_UPLOAD_ROLES = new Set(["admin", "super_admin"]);
-
-// Max dimensions per folder — keeps images optimized per use case
-const SIZE_PRESETS: Record<string, { width: number; height: number; quality: number }> = {
-  menu:       { width: 800,  height: 800,  quality: 80 },
-  categories: { width: 1200, height: 600,  quality: 80 },
-  outlets:    { width: 1200, height: 800,  quality: 80 },
-  avatars:    { width: 256,  height: 256,  quality: 75 },
-  banners:    { width: 1600, height: 800,  quality: 80 },
-  campaigns:  { width: 1200, height: 600,  quality: 80 },
-  brand:      { width: 800,  height: 800,  quality: 85 },
-};
-
-const DEFAULT_PRESET = { width: 1200, height: 1200, quality: 80 };
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB raw input limit
-const MAX_INPUT_PIXELS = 25_000_000;
+const ALLOWED_FOLDERS = new Set([
+  "menu", "categories", "outlets", "avatars", "banners", "campaigns", "brand",
+]);
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const MAX_REQUESTS_PER_WINDOW = 30;
-// NOTE: In-process only — does not share state across serverless instances.
-// For multi-instance deployments, use platform-level rate limiting or an external store.
 const uploadRateLimit = new Map<string, { count: number; resetAt: number }>();
 
 function isDevelopmentOrigin(origin: URL): boolean {
   if (process.env.NODE_ENV !== "development") return false;
-
   const host = origin.hostname;
   const isIpv4 = /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
-  return (
-    host === "localhost" ||
-    host === "127.0.0.1" ||
-    host === "0.0.0.0" ||
-    host.startsWith("10.") ||
-    host.startsWith("192.168.") ||
+  return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" ||
+    host.startsWith("10.") || host.startsWith("192.168.") ||
     /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
-    (origin.protocol === "http:" && (origin.port === "3000" || origin.port === "3001") && isIpv4)
-  );
+    (origin.protocol === "http:" && ["3000", "3001"].includes(origin.port) && isIpv4);
 }
 
 function assertSameOrigin(request: NextRequest) {
   const origin = request.headers.get("origin");
   if (!origin) return null;
-
-  const configuredOrigin = process.env.NEXT_PUBLIC_SITE_URL;
-  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-  const proto = request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol.replace(":", "");
-  const allowedOrigins = new Set([request.nextUrl.origin]);
-
-  if (host) allowedOrigins.add(`${proto}://${host}`);
-  if (configuredOrigin) allowedOrigins.add(configuredOrigin.replace(/\/$/, ""));
-
+  const configuredOrigin = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
   let parsedOrigin: URL;
   try {
     parsedOrigin = new URL(origin);
   } catch {
     return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
   }
-
-  if (host) {
-    const requestHost = host.split(",")[0]?.trim();
-    if (requestHost && parsedOrigin.host === requestHost) return null;
-  }
-
-  if (!allowedOrigins.has(parsedOrigin.origin) && !isDevelopmentOrigin(parsedOrigin)) {
-    console.warn("Blocked upload origin", {
-      origin: parsedOrigin.origin,
-      allowedOrigins: Array.from(allowedOrigins),
-      host,
-      forwardedProto: request.headers.get("x-forwarded-proto"),
-    });
+  if (parsedOrigin.origin !== request.nextUrl.origin && parsedOrigin.origin !== configuredOrigin && !isDevelopmentOrigin(parsedOrigin)) {
     return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
   }
-
   return null;
 }
 
@@ -85,188 +44,113 @@ function checkRateLimit(key: string) {
     uploadRateLimit.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
     return null;
   }
-
   if (current.count >= MAX_REQUESTS_PER_WINDOW) {
     return NextResponse.json({ error: "Too many upload requests" }, { status: 429 });
   }
-
   current.count += 1;
   return null;
 }
 
 async function requireUploadAccess(folder?: string) {
-  const supabase = await createClient(
-    folder === "avatars" ? "sb-customer-auth-token" : "sb-admin-auth-token"
-  );
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const supabase = await createClient(folder === "avatars" ? "sb-customer-auth-token" : "sb-admin-auth-token");
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }), userId: null };
+  if (folder === "avatars") return { error: null, userId: user.id };
 
-  if (!user) {
-    return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }), isAdmin: false };
-  }
-
-  // Any authenticated user can upload to avatars
-  if (folder === "avatars") {
-    return { error: null, userId: user.id, isAdmin: false };
-  }
-
-  const { data } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
+  const { data } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   const profile = data as { role: string } | null;
-
   if (!profile || !ALLOWED_UPLOAD_ROLES.has(profile.role)) {
-    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }), isAdmin: false };
+    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }), userId: null };
   }
-
-  return { error: null, userId: user.id, isAdmin: true };
+  return { error: null, userId: user.id };
 }
 
-function isAllowedFolder(folder: string): folder is keyof typeof SIZE_PRESETS {
-  return Object.prototype.hasOwnProperty.call(SIZE_PRESETS, folder);
+function isAllowedFolder(folder: string) {
+  return ALLOWED_FOLDERS.has(folder);
 }
 
-function isSafeGeneratedKey(key: string): boolean {
-  return /^[a-z-]+\/[0-9a-f-]+\.webp$/.test(key) && isAllowedFolder(key.split("/")[0]);
+function isSafeGeneratedKey(key: string) {
+  return /^[a-z-]+\/[0-9a-f-]+\.(?:webp|png|jpe?g|gif|avif)$/.test(key) && isAllowedFolder(key.split("/")[0]);
 }
 
-/**
- * POST /api/upload
- *
- * Accepts a multipart form upload, converts to optimized WebP,
- * and uploads to S3.
- *
- * FormData fields:
- *   file: File
- *   folder: string ("menu", "categories", "outlets", "avatars", "banners", etc.)
- *
- * Response: { url: string, key: string, size: number, method: "s3" | "local" }
- */
+type DetectedImage = { contentType: string; extension: string };
+
+function detectImage(bytes: Uint8Array): DetectedImage | null {
+  const ascii = (start: number, length: number) => String.fromCharCode(...bytes.slice(start, start + length));
+  if (bytes.length >= 12 && ascii(0, 4) === "RIFF" && ascii(8, 4) === "WEBP") {
+    return { contentType: "image/webp", extension: "webp" };
+  }
+  if (bytes.length >= 12 && ascii(4, 4) === "ftyp" && ["avif", "avis"].includes(ascii(8, 4))) {
+    return { contentType: "image/avif", extension: "avif" };
+  }
+  if (bytes.length >= 8 && [137, 80, 78, 71, 13, 10, 26, 10].every((value, index) => bytes[index] === value)) {
+    return { contentType: "image/png", extension: "png" };
+  }
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return { contentType: "image/jpeg", extension: "jpg" };
+  }
+  if (bytes.length >= 6 && ["GIF87a", "GIF89a"].includes(ascii(0, 6))) {
+    return { contentType: "image/gif", extension: "gif" };
+  }
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const originError = assertSameOrigin(request);
     if (originError) return originError;
-
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
-    const folder = (formData.get("folder") as string) || "misc";
+    const folder = String(formData.get("folder") || "");
+    if (!isAllowedFolder(folder)) return NextResponse.json({ error: "Invalid upload folder" }, { status: 400 });
 
     const access = await requireUploadAccess(folder);
     if (access.error) return access.error;
     const rateLimitError = checkRateLimit(access.userId!);
     if (rateLimitError) return rateLimitError;
-
-    if (!file) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    if (file.size <= 0 || file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: "Image must be between 1 byte and 10MB" }, { status: 400 });
     }
 
-    if (!file.type.startsWith("image/")) {
-      return NextResponse.json({ error: "Only image files are allowed" }, { status: 400 });
-    }
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const detected = detectImage(bytes);
+    if (!detected) return NextResponse.json({ error: "Unsupported or invalid image format" }, { status: 400 });
 
-    if (!isAllowedFolder(folder)) {
-      return NextResponse.json({ error: "Invalid upload folder" }, { status: 400 });
-    }
-
-    if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ error: "File too large (max 10MB)" }, { status: 400 });
-    }
-
-    // Read file into buffer
-    const arrayBuffer = await file.arrayBuffer();
-    const inputBuffer = Buffer.from(arrayBuffer);
-
-    const image = sharp(inputBuffer, {
-      limitInputPixels: MAX_INPUT_PIXELS,
-      failOn: "error",
-    });
-    const metadata = await image.metadata();
-    if (!metadata.format || !["jpeg", "jpg", "png", "webp", "gif", "avif"].includes(metadata.format)) {
-      return NextResponse.json({ error: "Unsupported image format" }, { status: 400 });
-    }
-
-    // Get size preset for this folder
-    const preset = SIZE_PRESETS[folder] || DEFAULT_PRESET;
-
-    // Process with sharp: resize + convert to WebP
-    const processedBuffer = await image
-      .resize(preset.width, preset.height, {
-        fit: "inside",         // Maintain aspect ratio, fit within bounds
-        withoutEnlargement: true, // Don't upscale small images
-      })
-      .webp({ quality: preset.quality })
-      .toBuffer();
-
-    // Generate unique filename
-    const safeName = `${crypto.randomUUID()}.webp`;
-    const key = `${folder}/${safeName}`;
-
+    const key = `${folder}/${crypto.randomUUID()}.${detected.extension}`;
     if (isS3Configured()) {
-      const url = await uploadToS3(key, processedBuffer, "image/webp");
-      return NextResponse.json({
-        url,
-        key,
-        size: processedBuffer.length,
-        method: "s3",
-      });
+      const url = await uploadToS3(key, bytes, detected.contentType);
+      return NextResponse.json({ url, key, size: bytes.length, method: "s3" });
+    }
+    if (process.env.NODE_ENV !== "development") {
+      return NextResponse.json({ error: "Image storage is not configured" }, { status: 503 });
     }
 
-    // Fallback: S3 not configured — return as base64 data URL for local dev
-    const base64 = processedBuffer.toString("base64");
-    const dataUrl = `data:image/webp;base64,${base64}`;
-    return NextResponse.json({
-      url: dataUrl,
-      key,
-      size: processedBuffer.length,
-      method: "local",
-      message: "S3 not configured. Image processed but stored as data URL.",
-    });
+    const dataUrl = `data:${detected.contentType};base64,${Buffer.from(bytes).toString("base64")}`;
+    return NextResponse.json({ url: dataUrl, key, size: bytes.length, method: "local" });
   } catch (error) {
     console.error("Upload error:", error);
-    return NextResponse.json(
-      { error: "Failed to process and upload image" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to upload image" }, { status: 500 });
   }
 }
 
-/**
- * DELETE /api/upload?key=folder/filename.webp
- *
- * Deletes an image from S3.
- */
 export async function DELETE(request: NextRequest) {
   try {
     const originError = assertSameOrigin(request);
     if (originError) return originError;
-
     const access = await requireUploadAccess();
     if (access.error) return access.error;
     const rateLimitError = checkRateLimit(access.userId!);
     if (rateLimitError) return rateLimitError;
 
     const key = request.nextUrl.searchParams.get("key");
-    if (!key) {
-      return NextResponse.json({ error: "Missing key parameter" }, { status: 400 });
-    }
-
-    if (!isSafeGeneratedKey(key)) {
+    if (!key || !isSafeGeneratedKey(key)) {
       return NextResponse.json({ error: "Invalid key parameter" }, { status: 400 });
     }
-
-    if (isS3Configured()) {
-      await deleteFromS3(key);
-    }
-
+    if (isS3Configured()) await deleteFromS3(key);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Delete error:", error);
-    return NextResponse.json(
-      { error: "Failed to delete image" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to delete image" }, { status: 500 });
   }
 }

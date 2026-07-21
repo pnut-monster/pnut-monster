@@ -26,6 +26,9 @@ export async function createClient(storageKey?: AuthStorageKey) {
     {
       cookieOptions: {
         name: cookieName,
+        path: "/",
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
       },
       cookies: {
         getAll() {

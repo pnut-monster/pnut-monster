@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import Razorpay from "razorpay";
 import { createClient } from "@supabase/supabase-js";
-import type { Json } from "@/lib/supabase/types";
-import { sendEmail, orderConfirmationEmail, paymentReceiptEmail } from "@/lib/email";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { sendTemplateEmail } from "@/lib/email";
+import {
+  orderConfirmationEmailData,
+  paymentSuccessfulEmailData,
+} from "@/lib/email/templates";
 
 function createRazorpayClient() {
   const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
@@ -103,11 +107,6 @@ export async function POST(req: NextRequest) {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
-      orderData,
-      orderItems,
-      walletAmount,
-      loyaltyPoints,
-      nthOrderDiscount,
       accessToken,
     } = await req.json();
 
@@ -147,15 +146,13 @@ export async function POST(req: NextRequest) {
       payment.order_id !== razorpay_order_id ||
       Number(payment.amount) !== Number(order.amount) ||
       payment.currency !== order.currency ||
-      !["captured", "authorized"].includes(String(payment.status))
+      String(payment.status) !== "captured"
     ) {
       return NextResponse.json(
         { error: "Payment could not be verified with Razorpay" },
         { status: 400 }
       );
     }
-
-    const paidAmount = Number(payment.amount) / 100;
 
     // Use the user's access token so auth.uid() is set in the RPC
     const supabase = createClient(
@@ -170,23 +167,40 @@ export async function POST(req: NextRequest) {
       }
     );
 
-    const finalOrderData: Json = {
-      ...orderData,
-      payment_status: "paid",
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_amount_paid: paidAmount,
-    };
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-    const { data, error } = await supabase.rpc(
-      "place_order_with_wallet" as never,
-      {
-        p_order: finalOrderData,
-        p_items: orderItems as Json[],
-        p_wallet_amount: walletAmount || 0,
-        p_loyalty_points: loyaltyPoints || 0,
-        p_nth_order_discount: nthOrderDiscount || 0,
-      } as never
+    const admin = createAdminClient();
+    const { data: attempt, error: attemptError } = await admin
+      .from("payment_attempts" as never)
+      .select("id, amount_paise, order_payload, items_payload, wallet_amount, nth_order_discount")
+      .eq("razorpay_order_id", razorpay_order_id)
+      .eq("user_id", user.id)
+      .single();
+    const savedAttempt = attempt as {
+      id: string;
+      amount_paise: number;
+      order_payload: Record<string, unknown>;
+      items_payload: unknown[];
+      wallet_amount: number;
+      nth_order_discount: number;
+    } | null;
+
+    if (attemptError || !savedAttempt || savedAttempt.amount_paise !== Number(payment.amount)) {
+      return NextResponse.json({ error: "Payment attempt does not match" }, { status: 400 });
+    }
+
+    const { error: captureError } = await admin
+      .from("payment_attempts" as never)
+      .update({ status: "captured", razorpay_payment_id, updated_at: new Date().toISOString() } as never)
+      .eq("id", savedAttempt.id);
+    if (captureError) throw captureError;
+
+    const { data, error } = await admin.rpc(
+      "finalize_captured_payment_attempt" as never,
+      { p_attempt_id: savedAttempt.id } as never
     );
 
     const result = data as { order_id: string } | null;
@@ -207,7 +221,6 @@ export async function POST(req: NextRequest) {
     }
 
     // Send emails (fire-and-forget)
-    const { data: { user } } = await supabase.auth.getUser();
     if (user?.email) {
       const { data: profile } = await supabase
         .from("profiles")
@@ -215,37 +228,49 @@ export async function POST(req: NextRequest) {
         .eq("id", user.id)
         .single();
       const customerName = (profile as { full_name: string | null } | null)?.full_name || "Customer";
-      const totalAmount = orderData.total_amount || 0;
+      const savedOrderData = savedAttempt.order_payload;
+      const savedOrderItems = savedAttempt.items_payload;
+      const totalAmount = Number(savedOrderData.total ?? 0);
 
       // Order confirmation
-      const orderTemplate = orderConfirmationEmail(customerName, {
+      const orderEmailData = orderConfirmationEmailData(customerName, {
         orderNumber: result.order_id.slice(0, 8).toUpperCase(),
-        items: (orderItems as { name: string; quantity: number; unit_price: number }[]).map(
-          (i: { name: string; quantity: number; unit_price: number }) => ({
-            name: i.name,
+        items: (savedOrderItems as { name?: string; item_name?: string; quantity: number; unit_price: number }[]).map(
+          (i) => ({
+            name: i.name || i.item_name || "Item",
             quantity: i.quantity,
             price: i.unit_price,
           })
         ),
-        subtotal: orderData.subtotal || totalAmount,
-        deliveryFee: orderData.delivery_fee || 0,
-        discount: (walletAmount || 0) + (nthOrderDiscount || 0),
+        subtotal: Number(savedOrderData.subtotal ?? totalAmount),
+        deliveryFee: Number(savedOrderData.delivery_fee ?? 0),
+        discount: Number(savedAttempt.wallet_amount || 0) + Number(savedAttempt.nth_order_discount || 0),
         total: totalAmount,
         paymentMethod: "Razorpay",
-        outletName: orderData.outlet_name || "PNUT Monster",
-        orderType: orderData.order_type || "delivery",
+        outletName: String(savedOrderData.outlet_name || "PNUT Monster"),
+        orderType: String(savedOrderData.order_type || "delivery"),
       });
-      sendEmail({ to: user.email, ...orderTemplate }).catch(() => {});
+      await sendTemplateEmail({
+        template: "order-confirmation",
+        to: user.email,
+        data: orderEmailData,
+        tags: { source: "checkout", order: result.order_id },
+      }).catch((emailError) => console.error("Order confirmation email failed", emailError));
 
       // Payment receipt
-      const receiptTemplate = paymentReceiptEmail(customerName, {
+      const receiptData = paymentSuccessfulEmailData(customerName, {
         amount: totalAmount,
         paymentId: razorpay_payment_id,
         orderId: razorpay_order_id,
         method: "Razorpay (Online)",
         date: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
       });
-      sendEmail({ to: user.email, ...receiptTemplate }).catch(() => {});
+      await sendTemplateEmail({
+        template: "payment-successful",
+        to: user.email,
+        data: receiptData,
+        tags: { source: "checkout", payment: razorpay_payment_id },
+      }).catch((emailError) => console.error("Payment receipt email failed", emailError));
     }
 
     return NextResponse.json({ order_id: result.order_id });

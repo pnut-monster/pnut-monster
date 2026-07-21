@@ -14,7 +14,7 @@ const contentSecurityPolicy = [
   "object-src 'none'",
   "frame-ancestors 'none'",
   "form-action 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://static.cloudflareinsights.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
@@ -25,6 +25,7 @@ const contentSecurityPolicy = [
 ].join("; ");
 
 const nextConfig = {
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   ...(isDev ? { allowedDevOrigins: ["127.0.0.1", "10.0.0.8", "localhost"] } : {}),
   async headers() {
     return [

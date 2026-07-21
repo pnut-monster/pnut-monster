@@ -152,7 +152,8 @@ export default function AdminReportsPage() {
   }, [supabase, range, customStart, customEnd]);
 
   useEffect(() => {
-    fetchReport();
+    const timer = window.setTimeout(() => void fetchReport(), 0);
+    return () => window.clearTimeout(timer);
   }, [fetchReport]);
 
   const STAT_CARDS = [

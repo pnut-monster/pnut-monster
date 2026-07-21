@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { sendEmail, welcomeEmail } from "@/lib/email";
+import { sendTemplateEmail } from "@/lib/email";
+import { welcomeEmailData } from "@/lib/email/templates";
 
 export async function POST() {
   try {
@@ -26,15 +27,14 @@ export async function POST() {
       return NextResponse.json({ error: "No email address" }, { status: 400 });
     }
 
-    const template = welcomeEmail(name);
-    const sent = await sendEmail({
+    const result = await sendTemplateEmail({
+      template: "welcome",
       to: email,
-      subject: template.subject,
-      html: template.html,
-      text: template.text,
+      data: welcomeEmailData(name),
+      tags: { source: "welcome_api" },
     });
 
-    return NextResponse.json({ sent });
+    return NextResponse.json({ sent: true, messageId: result.messageId });
   } catch (error) {
     console.error("Welcome email error:", error);
     return NextResponse.json({ error: "Failed to send email" }, { status: 500 });

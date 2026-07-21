@@ -2,14 +2,20 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 function safeNextPath(value: string | null): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/";
+  if (
+    !value ||
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    value.includes("\\") ||
+    /[\u0000-\u001f\u007f]/.test(value)
+  ) return "/";
   return value;
 }
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const next = safeNextPath(requestUrl.searchParams.get("next"));
-  const callbackUrl = new URL("/auth/callback", requestUrl.origin);
+  const callbackUrl = new URL("/auth/google/callback", requestUrl.origin);
   callbackUrl.searchParams.set("next", next);
 
   const supabase = await createClient("sb-customer-auth-token");

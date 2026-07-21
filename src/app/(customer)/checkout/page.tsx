@@ -352,6 +352,7 @@ export default function CheckoutPage() {
       throw new Error("Session expired. Please log in again.");
     }
     const capturedAccessToken = currentSession.access_token;
+    const { orderData, orderItems } = buildOrderPayload(resolvedOutletId);
 
     const res = await fetch("/api/razorpay/create-order", {
       method: "POST",
@@ -360,6 +361,11 @@ export default function CheckoutPage() {
         amount: amountDue,
         currency: "INR",
         receipt: `pnut_${Date.now()}`,
+        orderData,
+        orderItems,
+        walletAmount: walletApplied,
+        loyaltyPoints: loyaltySelected ? loyaltyMaxPoints : 0,
+        nthOrderDiscount: nthOrderDiscountAmount,
       }),
     });
 
@@ -369,8 +375,6 @@ export default function CheckoutPage() {
     }
 
     const razorpayOrder = await res.json();
-    const { orderData, orderItems } = buildOrderPayload(resolvedOutletId);
-
     const options: RazorpayOptions = {
       key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!,
       amount: razorpayOrder.amount,

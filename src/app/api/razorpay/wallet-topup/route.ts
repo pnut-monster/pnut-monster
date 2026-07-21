@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import Razorpay from "razorpay";
 import { createClient } from "@supabase/supabase-js";
-import { sendEmail, walletTopupEmail } from "@/lib/email";
+import { sendTemplateEmail } from "@/lib/email";
+import { walletTopupEmailData } from "@/lib/email/templates";
 
 function createRazorpayClient() {
   const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
@@ -105,14 +106,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { global: { headers: { Authorization: `Bearer ${accessToken}` } } }
+    );
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     // Create order
     if (action === "create-order") {
-      if (!amount || amount < 1) {
+      const numericAmount = Number(amount);
+      if (!Number.isFinite(numericAmount) || numericAmount < 1 || numericAmount > 100_000) {
         return NextResponse.json({ error: "Minimum top-up is ₹1" }, { status: 400 });
       }
 
       const order = await createRazorpayClient().orders.create({
-        amount: Math.round(amount * 100),
+        amount: Math.round(numericAmount * 100),
         currency: "INR",
         receipt: `wallet_${Date.now()}`,
       });
@@ -149,7 +161,7 @@ export async function POST(req: NextRequest) {
         payment.order_id !== razorpay_order_id ||
         Number(payment.amount) !== Number(order.amount) ||
         payment.currency !== order.currency ||
-        !["captured", "authorized"].includes(String(payment.status))
+        String(payment.status) !== "captured"
       ) {
         return NextResponse.json(
           { error: "Payment could not be verified with Razorpay" },
@@ -158,21 +170,6 @@ export async function POST(req: NextRequest) {
       }
 
       // Use user's token to call the RPC (so auth.uid() is set)
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-          global: {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          },
-        }
-      );
-
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      }
-
       const topupAmount = Number(payment.amount) / 100;
 
       const { data, error } = await supabase.rpc("self_topup_wallet" as never, {
@@ -196,12 +193,17 @@ export async function POST(req: NextRequest) {
           .single();
         const name = (profile as { full_name: string | null } | null)?.full_name || "Customer";
         const result = data as { total_balance?: number } | null;
-        const template = walletTopupEmail(name, {
+        const templateData = walletTopupEmailData(name, {
           amount: topupAmount,
           paymentId: razorpay_payment_id,
           newBalance: result?.total_balance ?? topupAmount,
         });
-        sendEmail({ to: user.email, ...template }).catch(() => {});
+        await sendTemplateEmail({
+          template: "wallet-topup",
+          to: user.email,
+          data: templateData,
+          tags: { source: "wallet_topup", payment: razorpay_payment_id },
+        }).catch((emailError) => console.error("Wallet top-up email failed", emailError));
       }
 
       return NextResponse.json(data);

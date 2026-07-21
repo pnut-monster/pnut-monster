@@ -1,6 +1,6 @@
 # Database Export Folder
 
-This folder stores SQL artifacts used for VM development bootstrap and restore.
+This folder stores SQL artifacts used for architecture review, VM development bootstrap, and restore. The schema files were refreshed from production on 2026-07-20 after verifying migrations 1–47; they contain definitions only, not auth user records.
 
 ## Primary Files
 

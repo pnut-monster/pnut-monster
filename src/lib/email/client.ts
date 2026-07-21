@@ -1,54 +1,86 @@
-import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
+import { SESClient, SendEmailCommand, type MessageTag } from "@aws-sdk/client-ses";
+import { emailConfig } from "./config";
 
-const ses = new SESClient({
-  region: process.env.AWS_SES_REGION || "ap-south-1",
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
-  },
-});
-
-const FROM_EMAIL = process.env.SES_FROM_EMAIL || "noreply@pnutmonster.com";
-const FROM_NAME = process.env.SES_FROM_NAME || "PNUT Monster";
+const ses = new SESClient({ region: emailConfig.aws.region });
 
 export interface SendEmailOptions {
-  to: string;
+  to: string | string[];
   subject: string;
   html: string;
-  text?: string;
+  text: string;
+  replyTo?: string;
+  tags?: Record<string, string>;
 }
 
-export async function sendEmail({ to, subject, html, text }: SendEmailOptions): Promise<boolean> {
-  if (!isSESConfigured()) {
-    console.warn("[Email] SES not configured — skipping email to", to);
-    return false;
+export type EmailDeliveryResult = {
+  success: true;
+  messageId: string;
+};
+
+function validateAddress(address: string) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address) || /[\r\n]/.test(address)) {
+    throw new Error("Invalid email address");
+  }
+  return address;
+}
+
+function messageTags(tags?: Record<string, string>): MessageTag[] | undefined {
+  if (!tags) return undefined;
+  return Object.entries(tags).slice(0, 50).map(([Name, Value]) => ({
+    Name: Name.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 256),
+    Value: String(Value).replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 256),
+  }));
+}
+
+export async function deliverEmail({
+  to,
+  subject,
+  html,
+  text,
+  replyTo,
+  tags,
+}: SendEmailOptions): Promise<EmailDeliveryResult> {
+  if (!isSESConfigured()) throw new Error("AWS SES sender configuration is incomplete");
+
+  const recipients = (Array.isArray(to) ? to : [to]).map(validateAddress);
+  if (recipients.length === 0 || recipients.length > 50) {
+    throw new Error("Email must have between 1 and 50 recipients");
   }
 
-  try {
-    await ses.send(
-      new SendEmailCommand({
-        Source: `${FROM_NAME} <${FROM_EMAIL}>`,
-        Destination: { ToAddresses: [to] },
-        Message: {
-          Subject: { Data: subject, Charset: "UTF-8" },
-          Body: {
-            Html: { Data: html, Charset: "UTF-8" },
-            ...(text ? { Text: { Data: text, Charset: "UTF-8" } } : {}),
-          },
+  const result = await ses.send(
+    new SendEmailCommand({
+      Source: `${emailConfig.sender.name.replace(/[\r\n<>]/g, "")} <${validateAddress(emailConfig.sender.email)}>`,
+      Destination: { ToAddresses: recipients },
+      ReplyToAddresses: replyTo || emailConfig.sender.replyTo
+        ? [validateAddress(replyTo || emailConfig.sender.replyTo)]
+        : undefined,
+      ConfigurationSetName: emailConfig.sender.configurationSet || undefined,
+      Tags: messageTags(tags),
+      Message: {
+        Subject: { Data: subject.replace(/[\r\n]+/g, " ").slice(0, 998), Charset: "UTF-8" },
+        Body: {
+          Html: { Data: html, Charset: "UTF-8" },
+          Text: { Data: text, Charset: "UTF-8" },
         },
-      })
-    );
+      },
+    })
+  );
+
+  if (!result.MessageId) throw new Error("AWS SES did not return a message ID");
+  return { success: true, messageId: result.MessageId };
+}
+
+/** Compatibility wrapper for legacy raw-email callers. Prefer sendTemplateEmail. */
+export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
+  try {
+    await deliverEmail(options);
     return true;
   } catch (error) {
-    console.error("[Email] Failed to send:", error);
+    console.error("[Email] Delivery failed", error);
     return false;
   }
 }
 
 export function isSESConfigured(): boolean {
-  return !!(
-    process.env.AWS_ACCESS_KEY_ID &&
-    process.env.AWS_SECRET_ACCESS_KEY &&
-    process.env.SES_FROM_EMAIL
-  );
+  return Boolean(emailConfig.sender.email && emailConfig.aws.region);
 }

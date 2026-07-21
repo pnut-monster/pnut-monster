@@ -447,7 +447,7 @@ export default function CustomerHomePage() {
               {popularItems.map((item) => (
                 <Link
                   key={item.id}
-                  href={`/menu?item=${item.slug}`}
+                  href={`/menu/${item.slug}`}
                   className="group"
                 >
                   <div className="bg-white rounded-2xl overflow-hidden border border-brand-gray-200 hover:border-brand-yellow hover:shadow-xl transition-all">

@@ -1,5 +1,10 @@
 # PNUT MONSTER Deep Codebase Audit — 2026-07-20
 
+> Status note: findings below preserve the original evidence trail. The
+> "Remediation result" and "Final production verification" sections are the
+> authoritative current status; earlier statements that findings remain open
+> are historical snapshots.
+
 ## Scope and method
 
 Reviewed the complete current repository (193 files) across Next.js routes and
@@ -266,3 +271,121 @@ them. Their state will drift unless an operator calls them.
 4. Regenerate Supabase types and add database integration tests.
 5. Make admin writes transactional/error-aware and replace local rate limits.
 6. Resolve the Cloudflare upload architecture and operational scheduling.
+
+## Current-worktree validation addendum — 2026-07-20
+
+This addendum revalidated the audit after the Google OAuth callback, expanded
+email-template system, admin notifications page, and Cloudflare apex Worker
+route were added.
+
+Validation performed:
+
+- `npm run lint`: passes with the same 4 warnings.
+- `npm run build`: passes and emits all 50 current pages/handlers.
+- `npm audit --omit=dev`: 0 known production dependency vulnerabilities.
+- `npm run email:templates:validate`: all 26 templates pass validation.
+- Literal internal navigation review: every pathname resolves to an App Router
+  page, but three query-driven links do not implement their advertised state.
+- Targeted credential scan found only documented placeholders; no tracked live
+  private key, service-role key, Razorpay secret, or AWS access key was found.
+
+### Additional medium finding
+
+#### M8. OAuth `next` validation permits a backslash open redirect
+
+Both OAuth route handlers accept any value beginning with `/` unless it begins
+with `//` (`src/app/(customer)/auth/google/route.ts:4` and
+`src/app/(customer)/auth/callback/route.ts:4`). A value such as
+`/\\evil.example` passes that check, but the URL parser normalizes it to
+`https://evil.example/` when the callback constructs the final redirect at
+`src/app/(customer)/auth/callback/route.ts:77`.
+
+Impact: an attacker can send a crafted Google-login URL that redirects the user
+to an attacker-controlled site after successful authentication, enabling a
+credible phishing chain. The session cookie is not directly disclosed.
+
+Recommendation: reject backslashes and control characters, parse against the
+expected origin, and accept the destination only when the parsed URL origin is
+exactly the application origin. Keep one shared validator for both handlers.
+
+### Additional route and integration bugs
+
+#### L5. Homepage menu deep links are ineffective
+
+The homepage links categories through `/menu?category=<slug>` and popular items
+through `/menu?item=<slug>` (`src/app/(customer)/page.tsx:395` and `:450`), but
+the menu page never reads search parameters. Both links simply open the generic
+menu. Item cards should link directly to `/menu/<slug>`; category links need
+menu-page query handling and scrolling/selection.
+
+#### L6. Outlet order-filter links are ineffective
+
+The admin outlet page links to `/admin/orders?outlet=<id>`
+(`src/app/(admin)/admin/outlets/page.tsx:504`), but the admin orders client does
+not read that parameter. Operators see all orders instead of the selected
+outlet's orders.
+
+#### L7. Restaurant notifications control is a placeholder presented as live
+
+`src/app/(restaurant)/restaurant/restaurant-shell.tsx:49` initializes a fixed
+notification count of `3`; the bell at `:298` has no click action or destination.
+This creates a permanently false alert and an inert control.
+
+#### L8. Most provisioned email templates have no sending workflow
+
+The registry and S3 manifest define 26 templates, while application call sites
+currently send only `welcome`, `order-confirmation`, `payment-successful`, and
+`wallet-topup`. The other 22 templates are assets, not connected product flows.
+That is acceptable as staged infrastructure, but they must not be represented
+as active notifications until triggers/routes exist.
+
+### Revalidated conclusions
+
+- The previously listed H1-H6 and M1-M7 remain unresolved in the audited code.
+- C1 is addressed by migration `20240101000042_super_admin_role_boundary.sql`;
+  production remains exposed if that migration has not been applied remotely.
+- The new admin email-cache endpoint requires an authenticated admin database
+  role, validates template names, and origin-checks its mutation. No new
+  privilege escalation was found there.
+- The Cloudflare `pnut.monster/*` Worker route is connected and returns HTTP 200
+  for `/` and `/login`; the prior 525 origin TLS failure is resolved.
+
+## Remediation result — 2026-07-20
+
+The findings in this report are the pre-fix audit baseline. Critical and
+high-risk application findings were remediated in the current worktree:
+
+- OAuth redirect validation, menu/category links, admin outlet filtering, and
+  the restaurant notification control were corrected.
+- Razorpay verification now requires captured payment state. Order creation
+  persists a server-authoritative payment attempt, verification finalizes that
+  attempt idempotently, and a signed captured/failed webhook route was added.
+- Wallet top-up now authenticates before provider order creation and enforces a
+  server-side amount cap.
+- Checkout authorization is enforced in production Supabase, including outlet,
+  customization, coupon, and loyalty constraints.
+- `npm run lint` passes with zero warnings, `npx tsc --noEmit` passes, and an
+  isolated production build passes all compile/type/static-generation phases
+  and emits 56 routes.
+
+### Final production verification
+
+- The linked production database has exact migration parity for all 47 local
+  migrations, including payment recovery and policy/index cleanup.
+- Fresh schema-only `public` and `auth` exports were generated in `db-export`;
+  no authentication user rows or production business data were exported.
+- The production architecture, all routes/APIs, integrations, configuration
+  boundaries, dependency ownership, caching, jobs, CMS/admin behavior, and
+  deployment model are consolidated in `docs/architecture.md`.
+- Resolved in this release candidate: C1, H1-H6, M1, M3, M4, M6, M8, and
+  L2-L8. M2 remains a broad legacy consistency improvement; M5 remains because
+  rate limiting is instance-local; M7 remains because there is no automated
+  test framework. L1 (permissive CSP) and L4 (external job scheduling) remain.
+- AWS SES/S3 must be fully provisioned before all transactional mail is
+  considered live.
+
+The new webhook is not deployed yet: Cloudflare has no Worker secrets and the
+local environment has no `RAZORPAY_WEBHOOK_SECRET`. Configure the same generated
+secret in Razorpay and Cloudflare before deploying. The existing live site and
+resolved Cloudflare TLS route were left untouched rather than deploying an
+incomplete payment configuration.

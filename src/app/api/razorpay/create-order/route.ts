@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Razorpay from "razorpay";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 function createRazorpayClient() {
   const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
@@ -87,9 +88,19 @@ export async function POST(req: NextRequest) {
     );
     if (rateLimitError) return rateLimitError;
 
-    const { amount, currency = "INR", receipt } = await req.json();
+    const {
+      amount,
+      currency = "INR",
+      receipt,
+      orderData,
+      orderItems,
+      walletAmount = 0,
+      loyaltyPoints = 0,
+      nthOrderDiscount = 0,
+    } = await req.json();
 
-    if (!amount || amount <= 0 || amount > 100_000) {
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > 100_000) {
       return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
     }
 
@@ -105,15 +116,41 @@ export async function POST(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    if (!orderData || !Array.isArray(orderItems) || orderItems.length === 0) {
+      return NextResponse.json({ error: "Missing order details" }, { status: 400 });
+    }
 
     const order = await createRazorpayClient().orders.create({
-      amount: Math.round(amount * 100),
+      amount: Math.round(numericAmount * 100),
       currency,
       receipt: receipt || `order_${Date.now()}`,
     });
 
+    const admin = createAdminClient();
+    const { data: attempt, error: attemptError } = await admin
+      .from("payment_attempts" as never)
+      .insert({
+        user_id: user.id,
+        razorpay_order_id: order.id,
+        amount_paise: Number(order.amount),
+        currency: order.currency,
+        order_payload: { ...orderData, user_id: user.id },
+        items_payload: orderItems,
+        wallet_amount: Number(walletAmount) || 0,
+        loyalty_points: Number(loyaltyPoints) || 0,
+        nth_order_discount: Number(nthOrderDiscount) || 0,
+      } as never)
+      .select("id")
+      .single();
+
+    if (attemptError || !attempt) {
+      console.error("Payment attempt persistence failed", attemptError);
+      return NextResponse.json({ error: "Could not persist payment attempt" }, { status: 500 });
+    }
+
     return NextResponse.json({
       id: order.id,
+      attemptId: (attempt as { id: string }).id,
       amount: order.amount,
       currency: order.currency,
     });

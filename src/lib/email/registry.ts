@@ -25,7 +25,7 @@ const standard = (key: EmailTemplateName, subject: string): TemplateDefinition =
   key: `${key}.html`,
   subject,
   text: "{{heading}}\n\n{{message}}\n\n{{buttonText}}: {{buttonUrl}}\n\nNeed help? {{supportEmail}}",
-  required: ["heading", "message", "buttonText", "buttonUrl"],
+  required: ["userName", "heading", "message", "buttonText", "buttonUrl"],
 });
 
 export const emailTemplateRegistry: Record<EmailTemplateName, TemplateDefinition> = {
@@ -94,4 +94,3 @@ export function assertRequiredVariables(name: EmailTemplateName, data: TemplateV
   );
   if (missing.length) throw new Error(`Missing required variables for ${name}: ${missing.join(", ")}`);
 }
-

@@ -39,10 +39,9 @@ export function renderTemplate(
     throw new Error(`Missing email template variables: ${Array.from(missing).sort().join(", ")}`);
   }
 
-  if (PLACEHOLDER.test(rendered)) {
+  if (/{{{?\s*[a-zA-Z0-9_.-]+\s*}?}}/.test(rendered)) {
     throw new Error("Email template contains unresolved variables");
   }
 
   return rendered;
 }
-

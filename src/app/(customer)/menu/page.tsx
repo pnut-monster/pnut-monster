@@ -245,6 +245,18 @@ export default function MenuPage() {
     };
   }, [selectedOutlet, outletChosen]);
 
+  useEffect(() => {
+    if (categories.length === 0) return;
+    const requestedSlug = new URLSearchParams(window.location.search).get("category");
+    if (!requestedSlug) return;
+    const requestedCategory = categories.find((category) => category.slug === requestedSlug);
+    if (!requestedCategory) return;
+    setActiveCategory(requestedCategory.id);
+    requestAnimationFrame(() => {
+      sectionRefs.current[requestedCategory.id]?.scrollIntoView({ block: "start" });
+    });
+  }, [categories]);
+
   const handleCategoryClick = (categoryId: string) => {
     setActiveCategory(categoryId);
     sectionRefs.current[categoryId]?.scrollIntoView({ behavior: "smooth", block: "start" });

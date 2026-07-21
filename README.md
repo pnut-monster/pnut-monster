@@ -1,9 +1,8 @@
 # PNUT MONSTER
 
-PNUT MONSTER is a Next.js 15 + Supabase application with three main surfaces:
-- customer app
-- admin app
-- restaurant/staff app
+Production food ordering, payments, wallet, loyalty, and outlet-operations platform deployed at [pnut.monster](https://pnut.monster). It combines a Next.js 15 Cloudflare Worker with Supabase Postgres/Auth/Realtime, Razorpay, and AWS S3/SES.
+
+The application has three role-aware surfaces: customer, admin, and restaurant/outlet staff. The complete system description, trust boundaries, route catalog, dependency map, and operations guidance are in [docs/architecture.md](docs/architecture.md).
 
 ## Prerequisites
 
@@ -72,17 +71,25 @@ Optional flags:
 - `--skip-auth`
 - `--schema-only`
 
-## VM Deployment Runbook
+## Documentation
 
-See:
-- `docs/vm-development-deployment.md`
+- [Architecture and feature catalog](docs/architecture.md)
+- [Current full audit](docs/codebase-deep-audit-2026-07-20.md)
+- [Database and production reconciliation](docs/supabase-production-audit-2026-07-20.md)
+- [Cloudflare deployment](docs/cloudflare-deployment.md)
+- [AWS email service](docs/aws-email-service.md)
+- [S3 setup](docs/s3-setup.md)
+- [VM development deployment](docs/vm-development-deployment.md)
+- [Environment template](.env.example)
 
-This includes:
-- VM prerequisites
-- app bootstrap steps
-- migration/seed workflow
-- dump restore workflow
-- smoke checks
+## Release Validation
+
+```bash
+npm run lint
+npm run build
+npm run email:templates:validate
+npm audit --omit=dev
+```
 
 ## Project Structure
 

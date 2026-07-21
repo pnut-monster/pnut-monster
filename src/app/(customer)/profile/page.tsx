@@ -242,15 +242,14 @@ export default function ProfilePage() {
     {
       label: "My Addresses",
       icon: MapPin,
+      href: "/addresses",
       color: "text-blue-500",
-      comingSoon: true,
     },
     {
       label: "Notifications",
       icon: Bell,
       href: "/notifications",
       color: "text-brand-yellow-dark",
-      comingSoon: true,
     },
     {
       label: "Referral Program",
@@ -262,14 +261,14 @@ export default function ProfilePage() {
     {
       label: "Help & Support",
       icon: HelpCircle,
+      href: "/support",
       color: "text-purple-500",
-      comingSoon: true,
     },
     {
       label: "About PNUT MONSTER",
       icon: Info,
+      href: "/about",
       color: "text-brand-gray-500",
-      comingSoon: true,
     },
   ];
 

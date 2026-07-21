@@ -6,6 +6,53 @@ import { cn } from "@/lib/utils/helpers";
 import { getImageUrl } from "@/lib/utils/image";
 import toast from "react-hot-toast";
 
+const IMAGE_PRESETS: Record<string, { width: number; height: number; quality: number }> = {
+  menu: { width: 800, height: 800, quality: 0.8 },
+  categories: { width: 1200, height: 600, quality: 0.8 },
+  outlets: { width: 1200, height: 800, quality: 0.8 },
+  avatars: { width: 256, height: 256, quality: 0.75 },
+  banners: { width: 1600, height: 800, quality: 0.8 },
+  campaigns: { width: 1200, height: 600, quality: 0.8 },
+  brand: { width: 800, height: 800, quality: 0.85 },
+};
+
+async function optimizeImage(file: File, folder: string): Promise<File> {
+  if (file.type === "image/gif") return file;
+  const preset = IMAGE_PRESETS[folder] || { width: 1200, height: 1200, quality: 0.8 };
+  const bitmap = await createImageBitmap(file);
+  try {
+    const scale = Math.min(1, preset.width / bitmap.width, preset.height / bitmap.height);
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d", { alpha: true });
+    if (!context) throw new Error("Your browser could not process this image");
+    context.drawImage(bitmap, 0, 0, width, height);
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (result) => result ? resolve(result) : reject(new Error("Image conversion failed")),
+        "image/webp",
+        preset.quality
+      );
+    });
+    return new File([blob], `${file.name.replace(/\.[^.]+$/, "")}.webp`, { type: "image/webp" });
+  } finally {
+    bitmap.close();
+  }
+}
+
+async function responseError(response: Response) {
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    const body = await response.json().catch(() => null) as { error?: string } | null;
+    if (body?.error) return body.error;
+  }
+  const text = await response.text().catch(() => "");
+  return text && text.length < 200 ? text : `Upload failed (${response.status})`;
+}
+
 interface ImageUploadProps {
   value: string | null;
   onChange: (url: string | null) => void;
@@ -52,8 +99,9 @@ export function ImageUpload({
 
     setUploading(true);
     try {
+      const optimizedFile = await optimizeImage(file, folder);
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", optimizedFile);
       formData.append("folder", folder);
 
       const res = await fetch("/api/upload", {
@@ -62,8 +110,7 @@ export function ImageUpload({
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Upload failed");
+        throw new Error(await responseError(res));
       }
 
       const data = await res.json();

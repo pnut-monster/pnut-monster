@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { cn } from "@/lib/utils/helpers";
 
 type AvatarSize = "sm" | "md" | "lg";
@@ -49,10 +50,12 @@ export function Avatar({ src, alt, name, size = "md", className }: AvatarProps) 
           {initials}
         </span>
       ) : (
-        <img
+        <Image
           src={src}
           alt={alt || name || "Avatar"}
-          className="h-full w-full object-cover"
+          fill
+          sizes={size === "lg" ? "56px" : size === "md" ? "40px" : "32px"}
+          className="object-cover"
           onError={() => setImgError(true)}
         />
       )}

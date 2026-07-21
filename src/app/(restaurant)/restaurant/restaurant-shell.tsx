@@ -46,7 +46,6 @@ export function RestaurantShell({
   const [staffProfile, setStaffProfile] = useState<Profile | null>(null);
   const [managedOutlets, setManagedOutlets] = useState<Outlet[]>([]);
   const [selectedOutlet, setSelectedOutlet] = useState<Outlet | null>(null);
-  const [notificationCount] = useState(3);
   const pageTitle = getPageTitle(pathname);
 
   // Skip layout for login page
@@ -294,18 +293,13 @@ export function RestaurantShell({
 
             <div className="flex items-center gap-3">
               {/* Notifications bell */}
-              <button
-                type="button"
+              <Link
+                href="/restaurant/orders"
                 className="relative p-2 rounded-lg hover:bg-brand-gray-100 transition-colors"
-                aria-label="Notifications"
+                aria-label="View orders"
               >
                 <Bell className="w-5 h-5 text-brand-gray-700" />
-                {notificationCount > 0 && (
-                  <span className="absolute top-1 right-1 w-4 h-4 bg-brand-red text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                    {notificationCount}
-                  </span>
-                )}
-              </button>
+              </Link>
 
               <div className="hidden sm:block text-right">
                 <p className="text-sm font-semibold text-brand-black">
