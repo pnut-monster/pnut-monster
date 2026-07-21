@@ -46,7 +46,7 @@ yarn-error.log*
 # local tool/runtime state
 .claude/
 supabase/.temp/
-/db-backups/production-*
+/db-backups/
 
 # typescript
 *.tsbuildinfo

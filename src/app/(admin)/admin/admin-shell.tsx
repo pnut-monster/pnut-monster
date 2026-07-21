@@ -25,6 +25,7 @@ import {
   Ticket,
   Gift,
   Bell,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils/helpers";
 
@@ -40,6 +41,7 @@ const SIDEBAR_ITEMS = [
   { href: "/admin/loyalty", label: "Loyalty", icon: Star },
   { href: "/admin/customers", label: "Customers & Staff", icon: Users },
   { href: "/admin/reports", label: "Reports", icon: BarChart3 },
+  { href: "/admin/security", label: "Security", icon: ShieldCheck },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ] as const;
 
@@ -67,11 +69,12 @@ export function AdminShell({
   const pageTitle = getPageTitle(pathname);
   const supabase = createClient();
 
-  // Skip auth check for login page
-  const isLoginPage = pathname === "/admin/login";
+  // Authentication pages render without the admin navigation shell.
+  const isAuthPage =
+    pathname === "/admin/login" || pathname.startsWith("/admin/mfa/");
 
   useEffect(() => {
-    if (isLoginPage) return;
+    if (isAuthPage) return;
 
     const checkAuth = async () => {
       try {
@@ -110,10 +113,9 @@ export function AdminShell({
     };
 
     checkAuth();
-  }, [isLoginPage, supabase, router]);
+  }, [isAuthPage, supabase, router]);
 
-  // Login page renders without layout
-  if (isLoginPage) {
+  if (isAuthPage) {
     return <>{children}</>;
   }
 

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import Razorpay from "razorpay";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { consumeRateLimit, requestIp } from "@/lib/security/rate-limit";
+import type { Json } from "@/lib/supabase/types";
 
 function createRazorpayClient() {
   const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
@@ -9,10 +11,6 @@ function createRazorpayClient() {
   if (!keyId || !keySecret) throw new Error("Razorpay credentials are not configured");
   return new Razorpay({ key_id: keyId, key_secret: keySecret });
 }
-
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const MAX_REQUESTS_PER_WINDOW = 20;
-const createOrderRateLimit = new Map<string, { count: number; resetAt: number }>();
 
 function isDevelopmentOrigin(origin: URL): boolean {
   if (process.env.NODE_ENV !== "development") return false;
@@ -60,36 +58,12 @@ function assertSameOrigin(request: NextRequest) {
   return null;
 }
 
-function checkRateLimit(key: string) {
-  const now = Date.now();
-  const current = createOrderRateLimit.get(key);
-  if (!current || current.resetAt <= now) {
-    createOrderRateLimit.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return null;
-  }
-
-  if (current.count >= MAX_REQUESTS_PER_WINDOW) {
-    return NextResponse.json({ error: "Too many payment attempts" }, { status: 429 });
-  }
-
-  current.count += 1;
-  return null;
-}
-
 export async function POST(req: NextRequest) {
   try {
     const originError = assertSameOrigin(req);
     if (originError) return originError;
 
-    const rateLimitError = checkRateLimit(
-      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-        req.headers.get("x-real-ip") ||
-        "local"
-    );
-    if (rateLimitError) return rateLimitError;
-
     const {
-      amount,
       currency = "INR",
       receipt,
       orderData,
@@ -98,11 +72,6 @@ export async function POST(req: NextRequest) {
       loyaltyPoints = 0,
       nthOrderDiscount = 0,
     } = await req.json();
-
-    const numericAmount = Number(amount);
-    if (!Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > 100_000) {
-      return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
-    }
 
     if (currency !== "INR") {
       return NextResponse.json({ error: "Unsupported currency" }, { status: 400 });
@@ -116,21 +85,60 @@ export async function POST(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const rateLimit = await consumeRateLimit(
+      "razorpay_create_order",
+      `${user.id}:${requestIp(req)}`,
+      20,
+      60
+    );
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Too many payment attempts" },
+        { status: 429, headers: { "Retry-After": String(rateLimit.retry_after) } }
+      );
+    }
     if (!orderData || !Array.isArray(orderItems) || orderItems.length === 0) {
       return NextResponse.json({ error: "Missing order details" }, { status: 400 });
     }
 
+    const admin = createAdminClient();
+    const { data: quoteData, error: quoteError } = await admin.rpc(
+      "create_checkout_quote",
+      {
+        p_user_id: user.id,
+        p_order: orderData as Json,
+        p_items: orderItems as Json,
+        p_wallet_amount: Number(walletAmount) || 0,
+        p_loyalty_points: Number(loyaltyPoints) || 0,
+        p_nth_order_discount: Number(nthOrderDiscount) || 0,
+      }
+    );
+    const quote = quoteData as unknown as {
+      quote_id: string;
+      amount_paise: number;
+      currency: string;
+      expires_at: string;
+    } | null;
+    if (quoteError || !quote) {
+      console.error("Checkout quote failed", quoteError);
+      return NextResponse.json(
+        { error: quoteError?.message || "Could not calculate checkout total" },
+        { status: 400 }
+      );
+    }
+
     const order = await createRazorpayClient().orders.create({
-      amount: Math.round(numericAmount * 100),
-      currency,
+      amount: quote.amount_paise,
+      currency: quote.currency,
       receipt: receipt || `order_${Date.now()}`,
     });
 
-    const admin = createAdminClient();
     const { data: attempt, error: attemptError } = await admin
-      .from("payment_attempts" as never)
+      .from("payment_attempts")
       .insert({
         user_id: user.id,
+        checkout_quote_id: quote.quote_id,
         razorpay_order_id: order.id,
         amount_paise: Number(order.amount),
         currency: order.currency,
@@ -139,7 +147,7 @@ export async function POST(req: NextRequest) {
         wallet_amount: Number(walletAmount) || 0,
         loyalty_points: Number(loyaltyPoints) || 0,
         nth_order_discount: Number(nthOrderDiscount) || 0,
-      } as never)
+      })
       .select("id")
       .single();
 
@@ -153,6 +161,7 @@ export async function POST(req: NextRequest) {
       attemptId: (attempt as { id: string }).id,
       amount: order.amount,
       currency: order.currency,
+      expiresAt: quote.expires_at,
     });
   } catch (error) {
     console.error("Razorpay create order error:", error);

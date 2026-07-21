@@ -4,6 +4,7 @@ import Razorpay from "razorpay";
 import { createClient } from "@supabase/supabase-js";
 import { sendTemplateEmail } from "@/lib/email";
 import { walletTopupEmailData } from "@/lib/email/templates";
+import { consumeRateLimit, requestIp } from "@/lib/security/rate-limit";
 
 function createRazorpayClient() {
   const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
@@ -11,10 +12,6 @@ function createRazorpayClient() {
   if (!keyId || !keySecret) throw new Error("Razorpay credentials are not configured");
   return new Razorpay({ key_id: keyId, key_secret: keySecret });
 }
-
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const MAX_REQUESTS_PER_WINDOW = 20;
-const topupRateLimit = new Map<string, { count: number; resetAt: number }>();
 
 function timingSafeEqualHex(left: string, right: string) {
   const leftBuffer = Buffer.from(left, "hex");
@@ -71,33 +68,10 @@ function assertSameOrigin(request: NextRequest) {
   return null;
 }
 
-function checkRateLimit(key: string) {
-  const now = Date.now();
-  const current = topupRateLimit.get(key);
-  if (!current || current.resetAt <= now) {
-    topupRateLimit.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return null;
-  }
-
-  if (current.count >= MAX_REQUESTS_PER_WINDOW) {
-    return NextResponse.json({ error: "Too many payment attempts" }, { status: 429 });
-  }
-
-  current.count += 1;
-  return null;
-}
-
 export async function POST(req: NextRequest) {
   try {
     const originError = assertSameOrigin(req);
     if (originError) return originError;
-
-    const rateLimitError = checkRateLimit(
-      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-        req.headers.get("x-real-ip") ||
-        "local"
-    );
-    if (rateLimitError) return rateLimitError;
 
     const { action, amount, razorpay_order_id, razorpay_payment_id, razorpay_signature, accessToken } =
       await req.json();
@@ -114,6 +88,18 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const rateLimit = await consumeRateLimit(
+      "razorpay_wallet_topup",
+      `${user.id}:${requestIp(req)}`,
+      20,
+      60
+    );
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Too many payment attempts" },
+        { status: 429, headers: { "Retry-After": String(rateLimit.retry_after) } }
+      );
     }
 
     // Create order

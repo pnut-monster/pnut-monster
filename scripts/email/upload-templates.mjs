@@ -3,6 +3,9 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { loadLocalEnv } from "../aws/load-local-env.mjs";
+
+await loadLocalEnv();
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const templateDir = resolve(root, "email-templates");

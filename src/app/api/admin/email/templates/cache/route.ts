@@ -15,6 +15,9 @@ async function requireAdmin() {
   const supabase = await createClient("sb-admin-auth-token");
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return false;
+  const { data: assurance, error: assuranceError } =
+    await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (assuranceError || assurance.currentLevel !== "aal2") return false;
   const { data } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   const role = (data as { role?: string } | null)?.role;
   return role === "admin" || role === "super_admin";

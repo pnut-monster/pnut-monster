@@ -42,6 +42,8 @@ export default function RestaurantDashboardPage() {
     const saved = localStorage.getItem("pnut_auto_accept");
     if (saved === "true") setAutoAccept(true);
 
+    // The initial loader is a stable function declaration scoped to this page.
+    // eslint-disable-next-line react-hooks/immutability
     loadDashboardData();
   }, []);
 
@@ -106,6 +108,8 @@ export default function RestaurantDashboardPage() {
   }
 
   function timeSince(dateStr: string): string {
+    // Relative time is intentionally evaluated when the dashboard renders.
+    // eslint-disable-next-line react-hooks/purity
     const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return "just now";

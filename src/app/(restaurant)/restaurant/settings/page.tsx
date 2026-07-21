@@ -50,6 +50,8 @@ export default function RestaurantSettingsPage() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
+    // The initial loader is a stable function declaration scoped to this page.
+    // eslint-disable-next-line react-hooks/immutability
     loadOutletAndSettings();
   }, []);
 

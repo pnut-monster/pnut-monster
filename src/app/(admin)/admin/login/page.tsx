@@ -5,7 +5,9 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Input } from "@/components/ui";
-import { Lock, Mail, AlertCircle } from "lucide-react";
+import { startAuthentication } from "@simplewebauthn/browser";
+import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
+import { Lock, Mail, AlertCircle, Fingerprint } from "lucide-react";
 import toast from "react-hot-toast";
 
 function clearAdminAuthCookies() {
@@ -25,6 +27,7 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -82,14 +85,113 @@ export default function AdminLoginPage() {
         return;
       }
 
-      toast.success("Logged in successfully.");
-      router.push("/admin");
+      const { data: assurance, error: assuranceError } =
+        await client.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (assuranceError) throw assuranceError;
+
+      if (assurance.currentLevel === "aal2") {
+        toast.success("Logged in successfully.");
+        router.push("/admin");
+        return;
+      }
+
+      const { data: factors, error: factorsError } =
+        await client.auth.mfa.listFactors();
+      if (factorsError) throw factorsError;
+
+      const hasVerifiedTotp = factors.totp.some(
+        (factor) => factor.status === "verified"
+      );
+      router.push(
+        hasVerifiedTotp ? "/admin/mfa/verify" : "/admin/mfa/setup"
+      );
     } catch (err: unknown) {
       console.error("Admin login error:", err);
       const message = err instanceof Error ? err.message : "Login failed";
       setError(message);
       toast.error(message);
       setLoading(false);
+    }
+  };
+
+  const handlePasskeyLogin = async () => {
+    if (!email.trim()) {
+      const message = "Enter your admin email first";
+      setError(message);
+      toast.error(message);
+      return;
+    }
+    if (!("PublicKeyCredential" in window)) {
+      const message = "This browser or device does not support passkeys";
+      setError(message);
+      toast.error(message);
+      return;
+    }
+
+    setPasskeyLoading(true);
+    setError("");
+    try {
+      clearAdminAuthCookies();
+      const optionsRes = await fetch(
+        "/api/admin/passkeys/authentication-options",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: email.trim() }),
+        }
+      );
+      const optionsBody = await optionsRes.json();
+      if (!optionsRes.ok) throw new Error(optionsBody.error || "Could not start passkey login");
+
+      const credential = await startAuthentication({
+        optionsJSON: optionsBody as PublicKeyCredentialRequestOptionsJSON,
+      });
+      const verifyRes = await fetch(
+        "/api/admin/passkeys/authentication-verify",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: email.trim(), response: credential }),
+        }
+      );
+      const verifyBody = await verifyRes.json();
+      if (!verifyRes.ok || !verifyBody.tokenHash) {
+        throw new Error(verifyBody.error || "Passkey login failed");
+      }
+
+      const client = createClient();
+      const { data, error: sessionError } = await client.auth.verifyOtp({
+        token_hash: verifyBody.tokenHash,
+        type: "magiclink",
+      });
+      if (sessionError || !data.user) throw sessionError ?? new Error("Could not create session");
+
+      const roleRes = await fetch("/api/admin/verify-role", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: data.user.id }),
+      });
+      const roleBody = await roleRes.json();
+      if (!roleRes.ok || !["admin", "super_admin"].includes(roleBody.role)) {
+        await client.auth.signOut();
+        throw new Error("Admin access required");
+      }
+
+      const { data: factors } = await client.auth.mfa.listFactors();
+      const hasVerifiedTotp = factors?.totp.some(
+        (factor) => factor.status === "verified"
+      );
+      router.push(
+        hasVerifiedTotp ? "/admin/mfa/verify" : "/admin/mfa/setup"
+      );
+    } catch (passkeyError: unknown) {
+      const message =
+        passkeyError instanceof Error
+          ? passkeyError.message
+          : "Passkey login was cancelled";
+      setError(message);
+      toast.error(message);
+      setPasskeyLoading(false);
     }
   };
 
@@ -119,7 +221,7 @@ export default function AdminLoginPage() {
               Admin Login
             </h2>
             <p className="text-sm text-brand-gray-500 mt-1">
-              Sign in with your admin credentials
+              Sign in with your password and authenticator app
             </p>
           </div>
 
@@ -140,6 +242,7 @@ export default function AdminLoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="admin@pnutmonster.com"
               icon={<Mail className="w-4 h-4" />}
+              autoComplete="username webauthn"
             />
             <Input
               label="Password"
@@ -157,6 +260,22 @@ export default function AdminLoginPage() {
               Sign In
             </Button>
           </form>
+
+          <div className="flex items-center gap-3 text-xs uppercase tracking-wider text-brand-gray-400">
+            <span className="h-px flex-1 bg-brand-gray-200" />
+            or
+            <span className="h-px flex-1 bg-brand-gray-200" />
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            loading={passkeyLoading}
+            onClick={handlePasskeyLogin}
+            className="w-full"
+          >
+            <Fingerprint className="h-5 w-5" />
+            Sign in with passkey
+          </Button>
 
         </div>
 

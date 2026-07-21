@@ -350,7 +350,11 @@ export default function AdminGiftCardsPage() {
     if (newStatus === "cancelled") updates.cancelled_at = new Date().toISOString();
     if (newStatus === "sold") updates.sold_at = new Date().toISOString();
 
-    await supabase.from("gift_cards").update(updates as never).eq("id", card.id);
+    const { error } = await supabase.from("gift_cards").update(updates as never).eq("id", card.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     await logAudit("gift_card", card.id, "status_changed", { status: card.status }, { status: newStatus });
     toast.success(`Card ${card.gift_card_id} → ${newStatus}`);
     fetchCards();

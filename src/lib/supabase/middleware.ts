@@ -114,6 +114,37 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url);
       }
 
+      const isMfaRoute =
+        pathname === "/admin/mfa/setup" || pathname === "/admin/mfa/verify";
+      const { data: assurance, error: assuranceError } =
+        await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+
+      if (assuranceError) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/admin/login";
+        return NextResponse.redirect(url);
+      }
+
+      if (!isMfaRoute && assurance.currentLevel !== "aal2") {
+        const { data: factors } = await supabase.auth.mfa.listFactors();
+        const hasVerifiedTotp = factors?.totp.some(
+          (factor) => factor.status === "verified"
+        );
+        const url = request.nextUrl.clone();
+        url.pathname = hasVerifiedTotp
+          ? "/admin/mfa/verify"
+          : "/admin/mfa/setup";
+        url.searchParams.set("redirect", pathname);
+        return NextResponse.redirect(url);
+      }
+
+      if (pathname === "/admin/mfa/setup" && assurance.currentLevel === "aal2") {
+        const url = request.nextUrl.clone();
+        url.pathname = "/admin";
+        url.search = "";
+        return NextResponse.redirect(url);
+      }
+
       return getResponse();
     }
 

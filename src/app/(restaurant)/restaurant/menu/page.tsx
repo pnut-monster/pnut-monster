@@ -41,6 +41,8 @@ export default function RestaurantMenuPage() {
   const [bulkMenuOpen, setBulkMenuOpen] = useState(false);
 
   useEffect(() => {
+    // The initial loader is a stable function declaration scoped to this page.
+    // eslint-disable-next-line react-hooks/immutability
     loadMenuData();
   }, []);
 

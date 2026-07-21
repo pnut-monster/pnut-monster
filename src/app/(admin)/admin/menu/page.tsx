@@ -647,7 +647,7 @@ export default function AdminMenuPage() {
     setEditingGroup(group);
     setGroupForm({
       name: group.name,
-      type: group.type,
+      type: group.type as GroupForm["type"],
       is_required: group.is_required,
       min_select: String(group.min_select),
       max_select: String(group.max_select),

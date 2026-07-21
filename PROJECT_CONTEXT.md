@@ -486,6 +486,141 @@ Future sessions must not revert these without explicit user instruction.
 
 ## Change Log
 
+## 2026-07-21
+
+### Audited
+
+- Investigated native admin passkeys against the installed Supabase Auth SDK,
+  local CLI, and linked production Auth configuration. Although auth-js 2.98
+  exposes experimental WebAuthn MFA methods, Supabase production rejects
+  enabling them with `Enabling of MFA with WebAuthn not currently supported`;
+  enrollment returns `mfa_webauthn_enroll_not_enabled`. Native Supabase
+  WebAuthn was therefore not used; TOTP remains the enforced AAL2 factor.
+- Completed a fresh deep audit of all 229 tracked files, 56 built routes, 14
+  route handlers, and 47 Supabase migrations. Added
+  `docs/codebase-deep-audit-2026-07-21.md` with evidence and remediation order.
+- Found no critical source-level authorization bypass in the current migration
+  state. The leading code risk is that Razorpay order creation accepts the
+  browser-computed amount and authoritative validation occurs after capture,
+  which can strand a captured underpayment for recovery/refund.
+- Confirmed remaining abuse/quality gaps: enumerable unthrottled password reset,
+  non-idempotent welcome email, process-local unbounded rate-limit maps,
+  unchecked admin mutations, no automated regression suite, 232 `as never`
+  casts, and tracked database backup artifacts.
+- Validation passes: zero-warning ESLint, `tsc --noEmit`, all 26 email templates,
+  the isolated 56-route production build, and `npm audit --omit=dev` with zero
+  known production vulnerabilities.
+
+### Fixed
+
+- Completed the production rollout for SES and the current security/payment
+  worktree. Added Worker variables for SES `us-east-1`, S3 templates in
+  `ap-south-1`, sender `Pnut Monster <noreply@pnut.monster>`, bucket
+  `pnut-monster-assets`, and
+  prefix `email-template`; stored both AWS credentials as encrypted Cloudflare
+  secrets without exposing their values.
+- Created fresh ignored production schema/data backups, deployed the successful
+  64-route OpenNext Worker as Cloudflare version
+  `14f65c4a-a354-4ccd-a1dc-ba6bc32c0d9a`, and applied production Supabase
+  migrations 48–50. Local/remote migration history is now in exact parity.
+- Production smoke checks pass for the homepage, customer login, and admin
+  login (HTTP 200), while unauthenticated payment creation correctly returns
+  HTTP 401. Cloudflare confirms AWS, Razorpay, and Supabase encrypted bindings.
+- Cleared React-compiler build errors in the three restaurant pages so the
+  Windows OpenNext build completes; existing set-state-in-effect findings remain
+  warnings rather than deployment blockers.
+- Added secure custom WebAuthn passkeys as an alternative admin first factor,
+  while preserving email/password as the other login choice and mandatory TOTP
+  as the second factor. Passkey proof exchanges for a one-time Supabase magic
+  link session, then the existing TOTP challenge upgrades it to AAL2.
+- Added migration `20240101000050_admin_passkeys.sql` with service-role-only
+  credential/challenge tables, replay counters, expiring one-use challenges,
+  and cascade cleanup. Added RP/origin binding, required user verification,
+  same-origin checks, rate limiting, and AAL2-only registration/removal APIs.
+- Added `/admin/security` for registering, listing, and removing passkeys and a
+  `Sign in with passkey` option on `/admin/login`; password login remains
+  unchanged. Added `@simplewebauthn/server` and browser dependencies.
+- Passkey changes pass TypeScript, local migration/database checks, and the full
+  64-route production build. Migration `000050` and its matching application
+  release are deployed together in production.
+- Completed a real local browser E2E run with a disposable admin and Edge CDP
+  virtual platform authenticator. Password login, mandatory TOTP enrollment,
+  passkey registration, passkey login, TOTP after passkey, a fresh
+  password-plus-TOTP login, and protected AAL2 dashboard access all passed. The
+  temporary user, browser, server, build output, and harness were removed.
+- E2E testing found and fixed two MFA setup defects: React effect replay could
+  launch concurrent TOTP enrollments, and Supabase's raw SVG QR data contained
+  trailing whitespace rejected by Next Image. Enrollment now shares one
+  in-flight promise and QR SVG content is trimmed and URL-encoded.
+- Configured the local and production email runtime sender as `Pnut Monster
+  <noreply@pnut.monster>` and the private template source as bucket
+  `pnut-monster-assets` with prefix `email-template`. Updated the email uploader
+  to load `.env.local` automatically and successfully published all 26 validated
+  templates to S3. Corrected the SES region to `us-east-1`; the sender is
+  verified there and production access is active. Confirmed end-to-end SES
+  delivery acceptance to an external Gmail recipient; AWS returned a message
+  ID successfully.
+- Added `npm run email:templates:test-delivery -- <recipient> [template...]`,
+  which exercises the website's real S3 loader, strict renderer, and SES client.
+  All 26 registered templates passed live delivery to Gmail. The website
+  currently invokes only welcome, order-confirmation, payment-successful, and
+  wallet-topup through this service; the other templates are delivery-ready but
+  still need event-specific application callers before they send automatically.
+- Verified live SES delivery from `Pnut Monster <noreply@pnut.monster>` to
+  `vermajatin477@gmail.com` (SES message ID
+  `0100019f84439b3f-9c45c5bc-bc17-42a5-b93c-e07447d36d78-000000`) and deployed
+  the sender change as Cloudflare Worker version
+  `06920c52-6993-4b63-a0f1-f4b9c5b824ea`. Cloudflare confirms the live
+  `SES_FROM_EMAIL` and `SES_FROM_NAME` bindings match those values.
+- Remediated the 2026-07-21 deep-audit repository findings. Razorpay order
+  initiation now uses a service-role-only authoritative checkout quote produced
+  by the exact checkout function in a rolled-back subtransaction; payment
+  attempts uniquely reference and consume the stored quote during finalization.
+- Replaced process-local payment/upload rate-limit maps with a shared Postgres
+  limiter using hashed subjects and bounded cleanup. Password reset is now
+  non-enumerating with per-IP/per-email limits, and welcome email is atomically
+  one-time with a durable per-user cooldown.
+- Added transactional admin coupon outlet-restriction replacement and explicit
+  error handling across audited coupon, gift-card, loyalty, mission, campaign,
+  and settings mutations.
+- Regenerated Supabase TypeScript types from the locally migrated schema and
+  removed broad casts from the new payment and abuse-control paths.
+- Added `npm run test:audit` static regression guards and `npm run test:db-audit`
+  live local-database RLS/grant checks. Applied the full local migration chain
+  without resetting data; lint, TypeScript, both audit suites, and the 58-route
+  production build pass.
+- Removed the two tracked database backup artifacts and changed `.gitignore` to
+  exclude all of `/db-backups/`. Deleted copies remain recoverable from existing
+  Git history until a separately authorized history purge is performed.
+- Production webhook recovery remains the only external deployment action: the
+  identical new `RAZORPAY_WEBHOOK_SECRET` must be configured in Razorpay and
+  Cloudflare; repository access cannot safely configure only one side.
+- Implemented mandatory authenticator-app TOTP MFA for `admin` and
+  `super_admin` accounts. Password login now routes first-time admins through
+  QR/manual-key enrollment and returning admins through a six-digit challenge.
+- Admin middleware requires Supabase `aal2` for every protected `/admin` page;
+  admin user-management and email-cache APIs also reject non-AAL2 sessions.
+- Added migration `20240101000049_require_admin_mfa.sql`, which makes the shared
+  `is_admin()` database authorization helper require an AAL2 JWT, preventing a
+  stolen password-only session from bypassing the UI through PostgREST or RPCs.
+- MFA code passes zero-warning ESLint, `tsc --noEmit`, local database lint, and
+  the full production build (58 routes). Deploy the application screens before
+  or together with migration `000049`; production deployment is still pending.
+- End-to-end local MFA validation passes with a disposable admin: the initial
+  password session reports AAL1 and `is_admin()` returns false; enrolling and
+  verifying a generated TOTP upgrades the session to AAL2 and `is_admin()`
+  returns true. Local Auth required a stack restart to load the already-enabled
+  `[auth.mfa.totp]` configuration. Confirm/enable TOTP in the production
+  Supabase Auth MFA settings before deploying; the public settings endpoint
+  does not expose that production flag.
+- Restored the production Razorpay checkout runtime by adding the missing
+  `RAZORPAY_KEY_SECRET` and `SUPABASE_SERVICE_ROLE_KEY` encrypted bindings to
+  the `pnut-monster` Cloudflare Worker. Confirmed both bindings are present and
+  the production create-order endpoint reaches its normal authentication guard.
+- `RAZORPAY_WEBHOOK_SECRET` remains unconfigured because no matching local
+  secret is available; webhook recovery is still pending, but interactive
+  checkout and wallet payment verification no longer lack required secrets.
+
 ## 2026-07-20
 
 ### Audited

@@ -467,12 +467,11 @@ export default function AdminCouponsPage() {
         if (error) throw error;
 
         // Update outlet restrictions
-        await supabase.from("coupon_outlet_restrictions").delete().eq("coupon_id", editingCoupon.id);
-        if (form.outlet_ids.length > 0) {
-          await supabase.from("coupon_outlet_restrictions").insert(
-            form.outlet_ids.map(oid => ({ coupon_id: editingCoupon.id, outlet_id: oid })) as never
-          );
-        }
+        const { error: restrictionError } = await supabase.rpc(
+          "replace_coupon_outlet_restrictions",
+          { p_coupon_id: editingCoupon.id, p_outlet_ids: form.outlet_ids }
+        );
+        if (restrictionError) throw restrictionError;
 
         await logAudit(editingCoupon.id, "updated", { code: editingCoupon.code }, payload as never);
         toast.success("Coupon updated");
@@ -486,11 +485,11 @@ export default function AdminCouponsPage() {
 
         const newId = (data as { id: string }).id;
 
-        if (form.outlet_ids.length > 0) {
-          await supabase.from("coupon_outlet_restrictions").insert(
-            form.outlet_ids.map(oid => ({ coupon_id: newId, outlet_id: oid })) as never
-          );
-        }
+        const { error: restrictionError } = await supabase.rpc(
+          "replace_coupon_outlet_restrictions",
+          { p_coupon_id: newId, p_outlet_ids: form.outlet_ids }
+        );
+        if (restrictionError) throw restrictionError;
 
         await logAudit(newId, "created", null, payload as never);
         toast.success("Coupon created");
@@ -514,7 +513,8 @@ export default function AdminCouponsPage() {
 
   const handleDelete = async (coupon: CouponRow) => {
     if (!confirm(`Delete coupon "${coupon.code}"? This cannot be undone.`)) return;
-    await supabase.from("coupons").delete().eq("id", coupon.id);
+    const { error } = await supabase.from("coupons").delete().eq("id", coupon.id);
+    if (error) return toast.error(error.message);
     await logAudit(coupon.id, "deleted", { code: coupon.code, status: coupon.status }, null);
     toast.success("Coupon deleted");
     fetchCoupons();
@@ -527,7 +527,8 @@ export default function AdminCouponsPage() {
     if (newStatus === "paused") updates.is_active = false;
     if (newStatus === "archived") updates.is_active = false;
 
-    await supabase.from("coupons").update(updates as never).eq("id", coupon.id);
+    const { error } = await supabase.from("coupons").update(updates as never).eq("id", coupon.id);
+    if (error) return toast.error(error.message);
     await logAudit(coupon.id, newStatus === "active" ? "activated" : newStatus === "paused" ? "paused" : "archived",
       { status: coupon.status }, { status: newStatus });
     toast.success(`Coupon ${newStatus}`);
@@ -550,10 +551,12 @@ export default function AdminCouponsPage() {
     };
 
     if (editingCampaign) {
-      await supabase.from("coupon_campaigns").update(payload as never).eq("id", editingCampaign.id);
+      const { error } = await supabase.from("coupon_campaigns").update(payload as never).eq("id", editingCampaign.id);
+      if (error) return toast.error(error.message);
       toast.success("Campaign updated");
     } else {
-      await supabase.from("coupon_campaigns").insert(payload as never);
+      const { error } = await supabase.from("coupon_campaigns").insert(payload as never);
+      if (error) return toast.error(error.message);
       toast.success("Campaign created");
     }
     setCampaignModalOpen(false);
@@ -562,7 +565,8 @@ export default function AdminCouponsPage() {
 
   const handleDeleteCampaign = async (c: CouponCampaign) => {
     if (!confirm(`Delete campaign "${c.name}"?`)) return;
-    await supabase.from("coupon_campaigns").delete().eq("id", c.id);
+    const { error } = await supabase.from("coupon_campaigns").delete().eq("id", c.id);
+    if (error) return toast.error(error.message);
     toast.success("Campaign deleted");
     fetchCampaigns();
   };

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { consumeRateLimit, requestIp } from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -42,23 +43,17 @@ export async function POST(request: NextRequest) {
 
   const admin = createAdminClient();
   const { email } = parsed.data;
-  const { data: profile, error: lookupError } = await admin
-    .from("profiles")
-    .select("id")
-    .eq("email", email)
-    .maybeSingle();
-
-  if (lookupError) {
+  const [ipLimit, emailLimit] = await Promise.all([
+    consumeRateLimit("forgot_password_ip", requestIp(request), 8, 900),
+    consumeRateLimit("forgot_password_email", email, 3, 3600),
+  ]);
+  if (!ipLimit.allowed || !emailLimit.allowed) {
     return NextResponse.json(
-      { error: "Could not verify this account. Please try again." },
-      { status: 500 }
-    );
-  }
-
-  if (!profile) {
-    return NextResponse.json(
-      { error: "No account is registered with this email address." },
-      { status: 404 }
+      { error: "Too many reset requests. Please try again later." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.max(ipLimit.retry_after, emailLimit.retry_after)) },
+      }
     );
   }
 
@@ -66,15 +61,16 @@ export async function POST(request: NextRequest) {
   // template renders {{ .Token }} instead of {{ .ConfirmationURL }}.
   const { error } = await admin.auth.resetPasswordForEmail(email);
 
-  if (error) {
+  if (error && !/user not found/i.test(error.message)) {
+    console.error("Password reset delivery failed", error);
     return NextResponse.json(
-      { error: error.message || "Could not send the reset link" },
-      { status: 400 }
+      { error: "Could not process the reset request" },
+      { status: 503 }
     );
   }
 
   return NextResponse.json(
-    { success: true },
+    { success: true, message: "If an account exists, reset instructions will be sent." },
     { headers: { "Cache-Control": "no-store" } }
   );
 }

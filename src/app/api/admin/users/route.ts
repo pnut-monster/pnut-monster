@@ -46,6 +46,17 @@ async function requireAdmin() {
     return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
 
+  const { data: assurance, error: assuranceError } =
+    await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (assuranceError || assurance.currentLevel !== "aal2") {
+    return {
+      error: NextResponse.json(
+        { error: "Two-factor authentication required" },
+        { status: 403 }
+      ),
+    };
+  }
+
   const { data: profile } = await supabase
     .from("profiles")
     .select("role")

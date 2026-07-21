@@ -21,6 +21,12 @@ import {
   TrendingDown,
   Coins,
 } from "lucide-react";
+import toast from "react-hot-toast";
+
+function assertMutationResults(results: { error: { message: string } | null }[]) {
+  const failure = results.find((result) => result.error);
+  if (failure?.error) throw new Error(failure.error.message);
+}
 
 // --- Loyalty Action type (matches DB) ---
 type LoyaltyAction = {
@@ -476,18 +482,23 @@ export default function AdminLoyaltyPage() {
       is_active: actionForm.is_active,
     };
 
-    if (editingAction) {
-      await supabase.from("loyalty_actions").update(payload as never).eq("id", editingAction.id);
-    } else {
-      await supabase.from("loyalty_actions").insert(payload as never);
+    try {
+      const result = editingAction
+        ? await supabase.from("loyalty_actions").update(payload as never).eq("id", editingAction.id)
+        : await supabase.from("loyalty_actions").insert(payload as never);
+      if (result.error) throw result.error;
+      setActionModal(false);
+      fetchActions();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save loyalty action");
+    } finally {
+      setActionSaving(false);
     }
-    setActionSaving(false);
-    setActionModal(false);
-    fetchActions();
   };
 
   const toggleActionActive = async (action: LoyaltyAction) => {
-    await supabase.from("loyalty_actions").update({ is_active: !action.is_active } as never).eq("id", action.id);
+    const { error } = await supabase.from("loyalty_actions").update({ is_active: !action.is_active } as never).eq("id", action.id);
+    if (error) return toast.error(error.message);
     setActions((prev) =>
       prev.map((a) => (a.id === action.id ? { ...a, is_active: !a.is_active } : a))
     );
@@ -495,7 +506,7 @@ export default function AdminLoyaltyPage() {
 
   const savePointsPct = async () => {
     setPctSaving(true);
-    await Promise.all([
+    const results = await Promise.all([
       supabase
         .from("app_settings" as never)
         .update({ value: pctWalletTopup } as never)
@@ -505,6 +516,8 @@ export default function AdminLoyaltyPage() {
         .update({ value: pctOrderPlaced } as never)
         .eq("key" as never, "points_pct_order_placed"),
     ]);
+    try { assertMutationResults(results); toast.success("Point percentages saved"); }
+    catch (error) { toast.error(error instanceof Error ? error.message : "Failed to save percentages"); }
     setPctSaving(false);
   };
 
@@ -512,7 +525,7 @@ export default function AdminLoyaltyPage() {
   const saveRedemption = async () => {
     setRedemptionSaving(true);
     const entries = Object.entries(redemption);
-    await Promise.all(
+    const results = await Promise.all(
       entries.map(([key, value]) =>
         supabase
           .from("app_settings" as never)
@@ -520,6 +533,8 @@ export default function AdminLoyaltyPage() {
           .eq("key" as never, key)
       )
     );
+    try { assertMutationResults(results); toast.success("Redemption settings saved"); }
+    catch (error) { toast.error(error instanceof Error ? error.message : "Failed to save redemption settings"); }
     setRedemptionSaving(false);
     fetchAnalytics();
   };
@@ -597,18 +612,21 @@ export default function AdminLoyaltyPage() {
       is_active: missionForm.is_active,
     };
 
-    if (editingMission) {
-      await supabase.from("missions").update(payload as never).eq("id", editingMission.id);
-    } else {
-      await supabase.from("missions").insert(payload as never);
-    }
-    setMissionSaving(false);
-    setMissionModal(false);
-    fetchMissions();
+    try {
+      const result = editingMission
+        ? await supabase.from("missions").update(payload as never).eq("id", editingMission.id)
+        : await supabase.from("missions").insert(payload as never);
+      if (result.error) throw result.error;
+      setMissionModal(false);
+      fetchMissions();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save mission");
+    } finally { setMissionSaving(false); }
   };
 
   const toggleMissionActive = async (mission: Mission) => {
-    await supabase.from("missions").update({ is_active: !mission.is_active } as never).eq("id", mission.id);
+    const { error } = await supabase.from("missions").update({ is_active: !mission.is_active } as never).eq("id", mission.id);
+    if (error) return toast.error(error.message);
     setMissions((prev) =>
       prev.map((m) => (m.id === mission.id ? { ...m, is_active: !m.is_active } : m))
     );
@@ -632,14 +650,12 @@ export default function AdminLoyaltyPage() {
       is_active: referralForm.is_active,
     };
 
-    if (referralCampaign) {
-      await supabase.from("campaigns").update(payload as never).eq("id", referralCampaign.id);
-    } else {
-      await supabase.from("campaigns").insert(payload as never);
-    }
-
+    const result = referralCampaign
+      ? await supabase.from("campaigns").update(payload as never).eq("id", referralCampaign.id)
+      : await supabase.from("campaigns").insert(payload as never);
+    if (result.error) toast.error(result.error.message);
+    else { toast.success("Referral program saved"); fetchReferralProgram(); }
     setReferralSaving(false);
-    fetchReferralProgram();
   };
 
   return (
@@ -720,8 +736,8 @@ export default function AdminLoyaltyPage() {
                   onClick={async () => {
                     setNthOrderSaving(true);
                     const newVal = !nthOrderEnabled;
-                    await supabase.from("app_settings" as never).update({ value: String(newVal) } as never).eq("key" as never, "nth_order_discount_enabled" as never);
-                    setNthOrderEnabled(newVal);
+                    const { error } = await supabase.from("app_settings" as never).update({ value: String(newVal) } as never).eq("key" as never, "nth_order_discount_enabled" as never);
+                    if (error) toast.error(error.message); else setNthOrderEnabled(newVal);
                     setNthOrderSaving(false);
                   }}
                 >
@@ -739,8 +755,8 @@ export default function AdminLoyaltyPage() {
                   onClick={async () => {
                     setNthOrderSaving(true);
                     const newVal = !nthOrderStackWithLoyalty;
-                    await supabase.from("app_settings" as never).update({ value: String(newVal) } as never).eq("key" as never, "nth_order_stack_with_loyalty" as never);
-                    setNthOrderStackWithLoyalty(newVal);
+                    const { error } = await supabase.from("app_settings" as never).update({ value: String(newVal) } as never).eq("key" as never, "nth_order_stack_with_loyalty" as never);
+                    if (error) toast.error(error.message); else setNthOrderStackWithLoyalty(newVal);
                     setNthOrderSaving(false);
                   }}
                 >
@@ -919,8 +935,8 @@ export default function AdminLoyaltyPage() {
                   onClick={async () => {
                     setMembershipSaving(true);
                     const newVal = !membershipEnabled;
-                    await supabase.from("app_settings" as never).update({ value: String(newVal) } as never).eq("key" as never, "membership_enabled" as never);
-                    setMembershipEnabled(newVal);
+                    const { error } = await supabase.from("app_settings" as never).update({ value: String(newVal) } as never).eq("key" as never, "membership_enabled" as never);
+                    if (error) toast.error(error.message); else setMembershipEnabled(newVal);
                     setMembershipSaving(false);
                   }}
                 >
@@ -983,11 +999,13 @@ export default function AdminLoyaltyPage() {
                   loading={membershipSaving}
                   onClick={async () => {
                     setMembershipSaving(true);
-                    await Promise.all([
+                    const results = await Promise.all([
                       supabase.from("app_settings" as never).update({ value: membershipTier1 } as never).eq("key" as never, "membership_tier1_threshold" as never),
                       supabase.from("app_settings" as never).update({ value: membershipTier2 } as never).eq("key" as never, "membership_tier2_threshold" as never),
                       supabase.from("app_settings" as never).update({ value: membershipBonusPct } as never).eq("key" as never, "membership_bonus_pct" as never),
                     ]);
+                    try { assertMutationResults(results); toast.success("Membership settings saved"); }
+                    catch (error) { toast.error(error instanceof Error ? error.message : "Failed to save membership settings"); }
                     setMembershipSaving(false);
                   }}
                 >

@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { uploadToS3, deleteFromS3, isS3Configured } from "@/lib/s3/client";
 import { createClient } from "@/lib/supabase/server";
+import { consumeRateLimit } from "@/lib/security/rate-limit";
 
 const ALLOWED_UPLOAD_ROLES = new Set(["admin", "super_admin"]);
 const ALLOWED_FOLDERS = new Set([
   "menu", "categories", "outlets", "avatars", "banners", "campaigns", "brand",
 ]);
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const MAX_REQUESTS_PER_WINDOW = 30;
-const uploadRateLimit = new Map<string, { count: number; resetAt: number }>();
 
 function isDevelopmentOrigin(origin: URL): boolean {
   if (process.env.NODE_ENV !== "development") return false;
@@ -34,20 +32,6 @@ function assertSameOrigin(request: NextRequest) {
   if (parsedOrigin.origin !== request.nextUrl.origin && parsedOrigin.origin !== configuredOrigin && !isDevelopmentOrigin(parsedOrigin)) {
     return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
   }
-  return null;
-}
-
-function checkRateLimit(key: string) {
-  const now = Date.now();
-  const current = uploadRateLimit.get(key);
-  if (!current || current.resetAt <= now) {
-    uploadRateLimit.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return null;
-  }
-  if (current.count >= MAX_REQUESTS_PER_WINDOW) {
-    return NextResponse.json({ error: "Too many upload requests" }, { status: 429 });
-  }
-  current.count += 1;
   return null;
 }
 
@@ -106,8 +90,11 @@ export async function POST(request: NextRequest) {
 
     const access = await requireUploadAccess(folder);
     if (access.error) return access.error;
-    const rateLimitError = checkRateLimit(access.userId!);
-    if (rateLimitError) return rateLimitError;
+    const rateLimit = await consumeRateLimit("upload", access.userId!, 30, 60);
+    if (!rateLimit.allowed) return NextResponse.json(
+      { error: "Too many upload requests" },
+      { status: 429, headers: { "Retry-After": String(rateLimit.retry_after) } }
+    );
     if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
     if (file.size <= 0 || file.size > MAX_FILE_SIZE) {
       return NextResponse.json({ error: "Image must be between 1 byte and 10MB" }, { status: 400 });
@@ -140,8 +127,11 @@ export async function DELETE(request: NextRequest) {
     if (originError) return originError;
     const access = await requireUploadAccess();
     if (access.error) return access.error;
-    const rateLimitError = checkRateLimit(access.userId!);
-    if (rateLimitError) return rateLimitError;
+    const rateLimit = await consumeRateLimit("upload", access.userId!, 30, 60);
+    if (!rateLimit.allowed) return NextResponse.json(
+      { error: "Too many upload requests" },
+      { status: 429, headers: { "Retry-After": String(rateLimit.retry_after) } }
+    );
 
     const key = request.nextUrl.searchParams.get("key");
     if (!key || !isSafeGeneratedKey(key)) {

@@ -8,6 +8,7 @@ import {
   orderConfirmationEmailData,
   paymentSuccessfulEmailData,
 } from "@/lib/email/templates";
+import { consumeRateLimit, requestIp } from "@/lib/security/rate-limit";
 
 function createRazorpayClient() {
   const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
@@ -15,10 +16,6 @@ function createRazorpayClient() {
   if (!keyId || !keySecret) throw new Error("Razorpay credentials are not configured");
   return new Razorpay({ key_id: keyId, key_secret: keySecret });
 }
-
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const MAX_REQUESTS_PER_WINDOW = 20;
-const verifyRateLimit = new Map<string, { count: number; resetAt: number }>();
 
 function timingSafeEqualHex(left: string, right: string) {
   const leftBuffer = Buffer.from(left, "hex");
@@ -75,33 +72,10 @@ function assertSameOrigin(request: NextRequest) {
   return null;
 }
 
-function checkRateLimit(key: string) {
-  const now = Date.now();
-  const current = verifyRateLimit.get(key);
-  if (!current || current.resetAt <= now) {
-    verifyRateLimit.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return null;
-  }
-
-  if (current.count >= MAX_REQUESTS_PER_WINDOW) {
-    return NextResponse.json({ error: "Too many payment attempts" }, { status: 429 });
-  }
-
-  current.count += 1;
-  return null;
-}
-
 export async function POST(req: NextRequest) {
   try {
     const originError = assertSameOrigin(req);
     if (originError) return originError;
-
-    const rateLimitError = checkRateLimit(
-      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-        req.headers.get("x-real-ip") ||
-        "local"
-    );
-    if (rateLimitError) return rateLimitError;
 
     const {
       razorpay_order_id,
@@ -171,10 +145,22 @@ export async function POST(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const rateLimit = await consumeRateLimit(
+      "razorpay_verify_payment",
+      `${user.id}:${requestIp(req)}`,
+      20,
+      60
+    );
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Too many payment attempts" },
+        { status: 429, headers: { "Retry-After": String(rateLimit.retry_after) } }
+      );
+    }
 
     const admin = createAdminClient();
     const { data: attempt, error: attemptError } = await admin
-      .from("payment_attempts" as never)
+      .from("payment_attempts")
       .select("id, amount_paise, order_payload, items_payload, wallet_amount, nth_order_discount")
       .eq("razorpay_order_id", razorpay_order_id)
       .eq("user_id", user.id)
@@ -193,14 +179,14 @@ export async function POST(req: NextRequest) {
     }
 
     const { error: captureError } = await admin
-      .from("payment_attempts" as never)
-      .update({ status: "captured", razorpay_payment_id, updated_at: new Date().toISOString() } as never)
+      .from("payment_attempts")
+      .update({ status: "captured", razorpay_payment_id, updated_at: new Date().toISOString() })
       .eq("id", savedAttempt.id);
     if (captureError) throw captureError;
 
     const { data, error } = await admin.rpc(
-      "finalize_captured_payment_attempt" as never,
-      { p_attempt_id: savedAttempt.id } as never
+      "finalize_captured_payment_attempt",
+      { p_attempt_id: savedAttempt.id }
     );
 
     const result = data as { order_id: string } | null;

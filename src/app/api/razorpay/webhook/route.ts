@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
 
   const admin = createAdminClient();
   const { data: attempt } = await admin
-    .from("payment_attempts" as never)
+    .from("payment_attempts")
     .select("id, amount_paise, currency, status")
     .eq("razorpay_order_id", payment.order_id)
     .maybeSingle();
@@ -57,12 +57,12 @@ export async function POST(request: NextRequest) {
 
   if (event.event === "payment.failed") {
     await admin
-      .from("payment_attempts" as never)
+      .from("payment_attempts")
       .update({
         status: "failed",
         failure_reason: payment.error_description || "Razorpay payment failed",
         updated_at: new Date().toISOString(),
-      } as never)
+      })
       .eq("id", saved.id)
       .neq("status", "completed");
     return NextResponse.json({ received: true });
@@ -76,18 +76,18 @@ export async function POST(request: NextRequest) {
   }
 
   const { error: updateError } = await admin
-    .from("payment_attempts" as never)
+    .from("payment_attempts")
     .update({
       status: saved.status === "completed" ? "completed" : "captured",
       razorpay_payment_id: payment.id,
       updated_at: new Date().toISOString(),
-    } as never)
+    })
     .eq("id", saved.id);
   if (updateError) throw updateError;
 
   const { error: finalizeError } = await admin.rpc(
-    "finalize_captured_payment_attempt" as never,
-    { p_attempt_id: saved.id } as never
+    "finalize_captured_payment_attempt",
+    { p_attempt_id: saved.id }
   );
   if (finalizeError) {
     console.error("Webhook payment finalization failed", finalizeError);
