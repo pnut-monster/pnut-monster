@@ -19,7 +19,6 @@ async function requireAdmin() {
   const role = (data as { role?: string } | null)?.role;
   return role === "admin" || role === "super_admin";
 }
-
 function sameOrigin(request: NextRequest) {
   const origin = request.headers.get("origin");
   if (!origin) return true;
@@ -48,4 +47,3 @@ export async function POST(request: NextRequest) {
   const removed = invalidateEmailTemplateCache(parsed.data.template);
   return NextResponse.json({ invalidated: removed, template: parsed.data.template ?? "all" });
 }
-

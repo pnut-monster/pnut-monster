@@ -22,7 +22,6 @@ function sharedVariables(): TemplateVariables {
     currentYear: new Date().getUTCFullYear(),
   };
 }
-
 export async function renderEmail(
   template: EmailTemplateName,
   data: TemplateVariables
@@ -55,4 +54,3 @@ export async function sendTemplateEmail({
     tags: { template, ...tags },
   });
 }
-

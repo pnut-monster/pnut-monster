@@ -28,4 +28,3 @@ for (const [destination, source] of Object.entries(manifest)) {
   }));
   process.stdout.write(`Uploaded s3://${bucket}/${key}\n`);
 }
-
