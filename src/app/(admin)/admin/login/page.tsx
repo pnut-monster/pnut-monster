@@ -85,6 +85,19 @@ export default function AdminLoginPage() {
         return;
       }
 
+      const { data: mfaSetting } = await client
+        .from("app_settings")
+        .select("value")
+        .eq("key", "require_2fa")
+        .single();
+      const is2faRequired = mfaSetting?.value !== "false";
+
+      if (!is2faRequired) {
+        toast.success("Logged in successfully.");
+        router.push("/admin");
+        return;
+      }
+
       const { data: assurance, error: assuranceError } =
         await client.auth.mfa.getAuthenticatorAssuranceLevel();
       if (assuranceError) throw assuranceError;
@@ -175,6 +188,19 @@ export default function AdminLoginPage() {
       if (!roleRes.ok || !["admin", "super_admin"].includes(roleBody.role)) {
         await client.auth.signOut();
         throw new Error("Admin access required");
+      }
+
+      const { data: mfaSettingPk } = await client
+        .from("app_settings")
+        .select("value")
+        .eq("key", "require_2fa")
+        .single();
+      const is2faRequiredPk = mfaSettingPk?.value !== "false";
+
+      if (!is2faRequiredPk) {
+        toast.success("Logged in successfully.");
+        router.push("/admin");
+        return;
       }
 
       const { data: factors } = await client.auth.mfa.listFactors();

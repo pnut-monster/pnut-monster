@@ -10,6 +10,7 @@ import {
   Package,
   Info,
   Save,
+  ShieldCheck,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -17,8 +18,10 @@ export default function AdminSettingsPage() {
   const [taxRate, setTaxRate] = useState("");
   const [packagingCharge, setPackagingCharge] = useState("");
   const [packagingMode, setPackagingMode] = useState<"per_order" | "per_item">("per_order");
+  const [require2fa, setRequire2fa] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saving2fa, setSaving2fa] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
@@ -26,12 +29,13 @@ export default function AdminSettingsPage() {
       const { data } = await supabase
         .from("app_settings")
         .select("key, value")
-        .in("key", ["tax_rate", "packaging_charge", "packaging_mode"]);
+        .in("key", ["tax_rate", "packaging_charge", "packaging_mode", "require_2fa"]);
       if (data) {
         for (const row of data as { key: string; value: string }[]) {
           if (row.key === "tax_rate") setTaxRate(String(parseFloat(row.value) * 100));
           if (row.key === "packaging_charge") setPackagingCharge(row.value);
           if (row.key === "packaging_mode") setPackagingMode(row.value as "per_order" | "per_item");
+          if (row.key === "require_2fa") setRequire2fa(row.value !== "false");
         }
       }
       setLoading(false);
@@ -158,6 +162,77 @@ export default function AdminSettingsPage() {
             Save Changes
           </Button>
         </div>
+      </div>
+
+      {/* Security - 2FA Toggle */}
+      <div className="bg-white rounded-xl shadow-sm border border-brand-gray-100 p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center">
+            <ShieldCheck className="w-5 h-5 text-green-600" />
+          </div>
+          <div>
+            <h2 className="font-[family-name:var(--font-heading)] text-lg font-bold text-brand-black">
+              Security
+            </h2>
+            <p className="text-sm text-brand-gray-500">
+              Manage two-factor authentication for admin login
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between py-3">
+          <div>
+            <p className="text-sm font-medium text-brand-black">
+              Require Two-Factor Authentication (2FA)
+            </p>
+            <p className="text-xs text-brand-gray-400 mt-0.5">
+              {require2fa
+                ? "Admins must verify with authenticator app after login"
+                : "Admins can login with just email and password"}
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={saving2fa}
+            onClick={async () => {
+              setSaving2fa(true);
+              const newValue = !require2fa;
+              const { error } = await supabase
+                .from("app_settings")
+                .update({ value: String(newValue), updated_at: new Date().toISOString() } as never)
+                .eq("key", "require_2fa");
+              if (error) {
+                toast.error("Failed to update 2FA setting");
+              } else {
+                setRequire2fa(newValue);
+                toast.success(
+                  newValue
+                    ? "Two-factor authentication enabled"
+                    : "Two-factor authentication disabled"
+                );
+              }
+              setSaving2fa(false);
+            }}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+              require2fa ? "bg-green-500" : "bg-brand-gray-300"
+            } ${saving2fa ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+          >
+            <span
+              className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                require2fa ? "translate-x-6" : "translate-x-1"
+              }`}
+            />
+          </button>
+        </div>
+
+        {!require2fa && (
+          <div className="mt-3 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-700">
+              Warning: Disabling 2FA reduces account security. Admins will be able to access the panel with only a password.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* App Info */}

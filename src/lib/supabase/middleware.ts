@@ -114,6 +114,13 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url);
       }
 
+      const { data: mfaSetting } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "require_2fa")
+        .single();
+      const is2faRequired = mfaSetting?.value !== "false";
+
       const isMfaRoute =
         pathname === "/admin/mfa/setup" || pathname === "/admin/mfa/verify";
       const { data: assurance, error: assuranceError } =
@@ -125,7 +132,7 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url);
       }
 
-      if (!isMfaRoute && assurance.currentLevel !== "aal2") {
+      if (is2faRequired && !isMfaRoute && assurance.currentLevel !== "aal2") {
         const { data: factors } = await supabase.auth.mfa.listFactors();
         const hasVerifiedTotp = factors?.totp.some(
           (factor) => factor.status === "verified"
