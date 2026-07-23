@@ -57,6 +57,7 @@ export function Avatar({ src, alt, name, size = "md", className }: AvatarProps) 
           sizes={size === "lg" ? "56px" : size === "md" ? "40px" : "32px"}
           className="object-cover"
           onError={() => setImgError(true)}
+          unoptimized
         />
       )}
     </div>

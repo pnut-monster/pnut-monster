@@ -928,6 +928,7 @@ export default function AdminMenuPage() {
                             fill
                             sizes="44px"
                             className="object-cover"
+                            unoptimized
                           />
                         ) : (
                           <span className="text-brand-gray-400 text-xs">IMG</span>

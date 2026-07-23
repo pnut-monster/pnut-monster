@@ -59,12 +59,13 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
-        options: { shouldCreateUser: true },
+      const res = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
       });
-      if (error) { toast.error(error.message); return; }
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || "Could not send OTP"); return; }
       setOtpSent(true);
       toast.success("OTP sent to your email!");
     } catch {
@@ -85,7 +86,7 @@ export default function LoginPage() {
       const { error } = await supabase.auth.verifyOtp({
         email: email.trim(),
         token: otp.trim(),
-        type: "email",
+        type: "magiclink",
       });
       if (error) {
         if (error.message.toLowerCase().includes("expired")) {

@@ -352,6 +352,7 @@ export default function ItemDetailPage() {
               priority
               sizes="(max-width: 768px) 100vw, 768px"
               className="object-cover"
+              unoptimized
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#FFF8E7] to-[#F5B731]/20">

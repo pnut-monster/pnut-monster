@@ -460,6 +460,7 @@ export default function CustomerHomePage() {
                           fill
                           sizes="(max-width: 1024px) 50vw, 25vw"
                           className="object-cover group-hover:scale-105 transition-transform duration-300"
+                          unoptimized
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
