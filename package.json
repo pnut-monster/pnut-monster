@@ -23,6 +23,7 @@
     "email:templates:upload": "npm run email:templates:validate && node scripts/email/upload-templates.mjs"
   },
   "dependencies": {
+    "@ast-grep/napi-win32-x64-msvc": "^0.44.1",
     "@aws-sdk/client-iam": "^3.1090.0",
     "@aws-sdk/client-route-53": "^3.1090.0",
     "@aws-sdk/client-s3": "^3.1002.0",

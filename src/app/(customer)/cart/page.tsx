@@ -9,6 +9,8 @@ import {
   Trash2,
   Tag,
   ShoppingBag,
+  TrendingUp,
+  Sparkles,
 } from "lucide-react";
 import { Button, Card, Input, EmptyState } from "@/components/ui";
 import { useCartStore } from "@/lib/stores/cart-store";
@@ -16,6 +18,7 @@ import { useOutletStore } from "@/lib/stores/outlet-store";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils/helpers";
 import type { Coupon } from "@/lib/supabase/types";
+import type { UpsellCoupon } from "@/app/api/coupons/upsell/route";
 import toast from "react-hot-toast";
 
 type ExtendedCoupon = Coupon & {
@@ -57,6 +60,7 @@ export default function CartPage() {
   const [couponError, setCouponError] = useState<string | null>(null);
   const [availableCoupons, setAvailableCoupons] = useState<ExtendedCoupon[]>([]);
   const [couponsLoaded, setCouponsLoaded] = useState(false);
+  const [upsellCoupons, setUpsellCoupons] = useState<UpsellCoupon[]>([]);
   const [taxRate, setTaxRate] = useState(0.05);
   const [packagingCharge, setPackagingCharge] = useState(10);
   const [packagingMode, setPackagingMode] = useState<"per_order" | "per_item">("per_order");
@@ -153,6 +157,41 @@ export default function CartPage() {
       setCouponError(null);
     }
   }, [availableCoupons, coupon_code, couponsLoaded, setCoupon]);
+
+  useEffect(() => {
+    if (subtotal <= 0) {
+      setUpsellCoupons([]);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      async function loadUpsell() {
+        try {
+          const response = await fetch("/api/coupons/upsell", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              subtotal,
+              outlet_id: selectedOutlet?.id ?? null,
+              items: couponItems,
+              applied_coupon_code: coupon_code ?? null,
+            }),
+          });
+          if (!response.ok) {
+            setUpsellCoupons([]);
+            return;
+          }
+          const data = (await response.json()) as { upsell_coupons?: UpsellCoupon[] };
+          setUpsellCoupons(data.upsell_coupons ?? []);
+        } catch {
+          setUpsellCoupons([]);
+        }
+      }
+      loadUpsell();
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [subtotal, selectedOutlet?.id, couponItems, coupon_code]);
 
   const handleApplyCoupon = async (selectedCode?: string) => {
     const code = (selectedCode ?? couponInput).trim().toUpperCase();
@@ -436,6 +475,55 @@ export default function CartPage() {
             </div>
           )}
         </Card>
+
+        {/* Upsell Nudge */}
+        {upsellCoupons.length > 0 && (
+          <div className="rounded-2xl border border-orange-200 bg-gradient-to-br from-orange-50 to-amber-50 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-7 h-7 rounded-full bg-orange-100 flex items-center justify-center">
+                <Sparkles className="h-4 w-4 text-orange-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-brand-black text-sm">Unlock bigger savings!</h3>
+                <p className="text-[11px] text-brand-gray-500">Add a little more to your cart</p>
+              </div>
+            </div>
+            <div className="space-y-2.5">
+              {upsellCoupons.map((upsell) => (
+                <div
+                  key={upsell.code}
+                  className="flex items-center gap-3 bg-white rounded-xl border border-orange-100 px-3 py-2.5 shadow-sm"
+                >
+                  <div className="shrink-0 w-9 h-9 rounded-lg bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center">
+                    <TrendingUp className="h-4 w-4 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-orange-700">
+                      Add {formatCurrency(upsell.amount_to_add)} more
+                    </p>
+                    <p className="text-[11px] text-brand-gray-600 truncate">
+                      {upsell.discount_type === "percentage"
+                        ? `Get ${upsell.discount_value}% off`
+                        : `Get ${formatCurrency(upsell.discount_value)} off`}
+                      {" "}with <span className="font-bold">{upsell.code}</span>
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-xs font-bold text-brand-green-dark">
+                      Save {formatCurrency(upsell.potential_savings)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => router.push("/menu")}
+              className="mt-3 w-full text-center text-xs font-bold text-orange-700 hover:text-orange-900 transition-colors py-1.5"
+            >
+              Browse menu to add more →
+            </button>
+          </div>
+        )}
 
         {/* Order Notes */}
         <Card>
