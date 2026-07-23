@@ -106,7 +106,7 @@ export default function ProfileSetupPage() {
 
       toast.success("Profile created! Welcome aboard!");
       fetch("/api/email/welcome", { method: "POST" }).catch(() => {});
-      router.replace("/");
+      router.replace("/referral-claim");
     } catch (err) {
       console.error("Profile setup error:", err);
       toast.error("Something went wrong. Please try again.");

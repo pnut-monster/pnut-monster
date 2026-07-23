@@ -58,7 +58,7 @@ export default function RestaurantDashboardPage() {
 
       let query = supabase
         .from("orders")
-        .select("*, order_items(*)")
+        .select("*, order_items(*), profiles!orders_user_id_fkey(full_name, phone)")
         .gte("created_at", todayStart.toISOString())
         .order("created_at", { ascending: false });
 
@@ -70,7 +70,7 @@ export default function RestaurantDashboardPage() {
 
       if (error) throw error;
 
-      const typedOrders = (orders ?? []) as (Order & { order_items: OrderItem[] })[];
+      const typedOrders = (orders ?? []) as (Order & { order_items: OrderItem[]; profiles: { full_name: string | null; phone: string | null } | null })[];
 
       // Compute stats
       const revenue = typedOrders.reduce((sum, o) => sum + o.total, 0);
@@ -89,7 +89,7 @@ export default function RestaurantDashboardPage() {
         .map((o) => ({
           ...o,
           items: o.order_items,
-          customer_name: "Customer", // In production, join with profiles
+          customer_name: o.profiles?.full_name || "Customer",
         }));
 
       setActiveOrders(active);

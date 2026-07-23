@@ -24,25 +24,25 @@ const sampleData = {
   brandColor: '#4CAF50',
   accentColor: '#F5B731',
   logoUrl: '/icons/icon-192.png',
-  websiteUrl: 'http://localhost:3001',
+  websiteUrl: 'http://localhost:3000',
   userName: 'Jatin',
   heading: 'Welcome to PNUT MONSTER!',
   message: 'Thanks for joining the healthy food revolution. Your account is ready and waiting for your first delicious order.',
   buttonText: 'Start Ordering',
-  buttonUrl: 'http://localhost:3001/menu',
+  buttonUrl: 'http://localhost:3000/menu',
   footerText: 'Healthy food, made monstrously delicious.',
   supportEmail: 'support@pnut.monster',
   socialInstagramUrl: 'https://instagram.com/pnutmonster',
   socialFacebookUrl: 'https://facebook.com/pnutmonster',
   socialXUrl: 'https://x.com/pnutmonster',
-  privacyUrl: 'http://localhost:3001/privacy',
-  termsUrl: 'http://localhost:3001/terms',
-  contactUrl: 'http://localhost:3001/contact',
+  privacyUrl: 'http://localhost:3000/privacy',
+  termsUrl: 'http://localhost:3000/terms',
+  contactUrl: 'http://localhost:3000/contact',
   currentYear: '2026',
   companyName: 'PNUT Monster Foods Private Limited',
   otp: '847293',
   expiryTime: '10 minutes',
-  resetLink: 'http://localhost:3001/reset-password?token=abc123xyz',
+  resetLink: 'http://localhost:3000/reset-password?token=abc123xyz',
   orderNumber: 'PM-20260722-0042',
   outletName: 'PNUT MONSTER HSR Layout',
   orderType: 'Pickup',
@@ -82,18 +82,19 @@ function render(html) {
 
 async function loadAll() {
   const grid = document.getElementById('grid');
+  const bust = Date.now();
   for (const tpl of templates) {
     const card = document.createElement('div');
     card.className = 'card';
-    card.innerHTML = `<div class="card-header"><h3>${tpl.label}</h3><span>${tpl.desc}</span></div>`;
+    card.innerHTML = '<div class="card-header"><h3>' + tpl.label + '</h3><span>' + tpl.desc + '</span></div>';
     const iframe = document.createElement('iframe');
     iframe.sandbox = 'allow-same-origin';
     card.appendChild(iframe);
     grid.appendChild(card);
 
-    fetch('/email-templates/' + tpl.name + '.html')
-      .then(r => r.text())
-      .then(html => { iframe.srcdoc = render(html); });
+    fetch('/email-templates/' + tpl.name + '.html?v=' + bust)
+      .then(function(r) { return r.text(); })
+      .then(function(html) { iframe.srcdoc = render(html); });
   }
 }
 

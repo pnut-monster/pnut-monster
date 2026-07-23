@@ -23,6 +23,7 @@ const PROTECTED_CUSTOMER_PATHS = [
   "/support",
   "/about",
   "/referral",
+  "/referral-claim",
   "/checkout",
 ];
 
@@ -94,6 +95,13 @@ export async function updateSession(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
 
+    if (!user && isProtectedCustomerRoute) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        return getResponse();
+      }
+    }
+
     if (isAdminRoute) {
       if (!user) {
         const url = request.nextUrl.clone();
@@ -118,8 +126,8 @@ export async function updateSession(request: NextRequest) {
         .from("app_settings")
         .select("value")
         .eq("key", "require_2fa")
-        .single();
-      const is2faRequired = mfaSetting?.value !== "false";
+        .maybeSingle();
+      const is2faRequired = !mfaSetting || mfaSetting.value !== "false";
 
       const isMfaRoute =
         pathname === "/admin/mfa/setup" || pathname === "/admin/mfa/verify";
@@ -188,13 +196,11 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
   } catch {
-    const url = request.nextUrl.clone();
-    url.pathname = isAdminRoute
-      ? "/admin/login"
-      : isRestaurantRoute
-        ? "/restaurant/login"
-        : "/login";
-    return NextResponse.redirect(url);
+    if (isAdminRoute || isRestaurantRoute) {
+      const url = request.nextUrl.clone();
+      url.pathname = isAdminRoute ? "/admin/login" : "/restaurant/login";
+      return NextResponse.redirect(url);
+    }
   }
 
   return getResponse();

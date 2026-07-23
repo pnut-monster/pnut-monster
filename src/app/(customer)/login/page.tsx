@@ -34,6 +34,11 @@ export default function LoginPage() {
     toast.error("Auth service is unreachable. Start local Supabase and try again.");
   };
 
+  const getRedirectPath = () => {
+    const redirect = searchParams.get("redirect");
+    return redirect?.startsWith("/") && !redirect.startsWith("//") ? redirect : "/";
+  };
+
   const handlePasswordSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) { toast.error("Please enter your email"); return; }
@@ -45,7 +50,7 @@ export default function LoginPage() {
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (error) { toast.error(error.message); return; }
       toast.success("Welcome back!");
-      router.replace("/");
+      router.replace(getRedirectPath());
     } catch {
       handleAuthUnavailable();
     } finally {
@@ -121,7 +126,7 @@ export default function LoginPage() {
       }
 
       toast.success("Welcome back!");
-      router.replace("/");
+      router.replace(getRedirectPath());
     } catch {
       handleAuthUnavailable();
     } finally {

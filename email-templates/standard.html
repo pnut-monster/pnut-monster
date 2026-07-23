@@ -10,79 +10,108 @@
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
 @media(max-width:620px){
-  .shell{padding:12px!important}
-  .card{border-radius:20px!important}
-  .content{padding:28px 20px!important}
-  .header{padding:22px 20px!important}
-  .button{display:block!important;text-align:center!important}
-  .footer-cell{padding:20px 20px!important}
+  .shell{padding:8px!important}
+  .card{border-radius:14px!important}
+  .content{padding:24px 20px!important}
+  .button-td a{display:block!important;text-align:center!important}
+  .footer-cell{padding:20px!important}
+  .social-pill{margin:0 2px!important;padding:7px 10px!important}
 }
 @media(prefers-color-scheme:dark){
-  .page{background:#1A1A1A!important}
-  .card{background:#262626!important;border-color:#333!important}
-  .content h1,.content p,.content strong{color:#F5F5F5!important}
-  .content .muted-text{color:#A3A3A3!important}
-  .footer-wrap{background:#1F1F1F!important;border-color:#333!important}
-  .footer-text{color:#A3A3A3!important}
+  .page{background:#121212!important}
+  .card{background:#1E1E1E!important;border-color:#2A2A2A!important}
+  .header-bg{background:#111111!important}
+  .content h1{color:#FFFFFF!important}
+  .body-text{color:#D4D4D4!important}
+  .muted{color:#737373!important}
+  .fallback-link{color:#81C784!important}
+  .footer-wrap{background:#171717!important;border-color:#2A2A2A!important}
+  .footer-tagline{color:#A3A3A3!important}
+  .footer-link{color:#737373!important}
+  .social-pill{background:#2A2A2A!important;border-color:#3A3A3A!important}
+  .social-pill-text{color:#D4D4D4!important}
 }
 </style>
 </head>
-<body class="page" style="margin:0;padding:0;background:#FFF8E7;font-family:Nunito,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#1A1A1A">
-<div style="display:none;max-height:0;overflow:hidden">{{heading}}</div>
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" class="shell" style="background:#FFF8E7;padding:32px 16px">
+<body class="page" style="margin:0;padding:0;background:#FFF4D6;font-family:Nunito,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#1A1A1A;-webkit-text-size-adjust:none">
+
+<!-- Preheader -->
+<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all">
+  {{heading}} — {{message}}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;
+</div>
+
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" class="shell" style="background:#FFF4D6;padding:32px 16px">
 <tr><td align="center">
 
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" class="card" style="max-width:600px;background:#ffffff;border:1px solid #E5E7EB;border-radius:24px;overflow:hidden;box-shadow:0 4px 24px rgba(26,26,26,.06)">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" class="card" style="max-width:580px;background:#ffffff;border:1px solid #E5E5E5;border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.04),0 12px 40px rgba(0,0,0,.06)">
 
-<!-- Accent bar -->
-<tr><td style="height:4px;background:linear-gradient(90deg,#F5B731,#4CAF50)"></td></tr>
-
-<!-- Header -->
-<tr><td class="header" style="padding:24px 36px;border-bottom:1px solid #F3F4F6">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-<tr>
-<td>
-<a href="{{websiteUrl}}" style="text-decoration:none;display:inline-flex;align-items:center">
-<img src="{{logoUrl}}" width="40" height="40" alt="{{brandName}}" style="vertical-align:middle;border-radius:10px;border:2px solid #FFF8E7">
-<span style="margin-left:10px;color:#1A1A1A;font-size:17px;font-weight:800;letter-spacing:.01em;font-family:Nunito,sans-serif">{{brandName}}</span>
+<!-- Header - Dark gray, centered logo -->
+<tr><td class="header-bg" align="center" style="background:#F5B731;padding:24px 32px">
+<a href="{{websiteUrl}}" style="text-decoration:none;display:inline-block;text-align:center">
+<img src="{{logoUrl}}" width="44" height="44" alt="{{brandName}}" style="display:block;margin:0 auto 8px;border-radius:10px">
+<span style="color:#1A1A1A;font-size:14px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;font-family:Nunito,sans-serif">{{brandName}}</span>
 </a>
-</td>
-</tr>
-</table>
 </td></tr>
 
 <!-- Content -->
-<tr><td class="content" style="padding:40px 36px">
-<p style="margin:0 0 8px;color:#F5B731;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase">{{brandName}}</p>
-<h1 style="margin:0 0 20px;font-size:28px;line-height:1.25;letter-spacing:-.02em;color:#1A1A1A;font-family:Nunito,sans-serif;font-weight:800">{{heading}}</h1>
-<p style="margin:0 0 12px;font-size:15px;line-height:1.7;color:#374151">Hi {{userName}},</p>
-<p style="margin:0 0 28px;font-size:15px;line-height:1.7;color:#374151">{{message}}</p>
+<tr><td class="content" style="padding:36px 32px 40px">
+
+<h1 style="margin:0 0 20px;font-size:24px;line-height:1.3;letter-spacing:-.02em;color:#111111;font-family:Nunito,sans-serif;font-weight:800">{{heading}}</h1>
+
+<p class="body-text" style="margin:0 0 6px;font-size:15px;line-height:1.75;color:#374151">Hi {{userName}},</p>
+<p class="body-text" style="margin:0 0 32px;font-size:15px;line-height:1.75;color:#374151">{{message}}</p>
 
 <!-- CTA Button -->
 <table role="presentation" cellspacing="0" cellpadding="0">
-<tr><td bgcolor="#4CAF50" style="border-radius:12px;box-shadow:0 2px 8px rgba(76,175,80,.3)">
-<a class="button" href="{{buttonUrl}}" style="display:inline-block;padding:14px 28px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;font-family:Nunito,sans-serif;letter-spacing:.01em">{{buttonText}}</a>
+<tr><td class="button-td" bgcolor="#4CAF50" style="border-radius:10px;box-shadow:0 2px 4px rgba(0,0,0,.08),0 6px 16px rgba(76,175,80,.28)">
+<a href="{{buttonUrl}}" style="display:inline-block;padding:16px 36px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;font-family:Nunito,sans-serif;letter-spacing:.02em;line-height:1">{{buttonText}}</a>
 </td></tr>
 </table>
 
-<p class="muted-text" style="margin:24px 0 0;font-size:12px;line-height:1.6;color:#6B7280">If the button doesn't work, copy this link:<br>
-<a href="{{buttonUrl}}" style="color:#4CAF50;word-break:break-all;font-size:12px">{{buttonUrl}}</a></p>
+<p class="muted" style="margin:28px 0 0;font-size:12px;line-height:1.5;color:#ACACAC">If the button doesn't work, copy this link:<br>
+<a class="fallback-link" href="{{buttonUrl}}" style="color:#4CAF50;word-break:break-all;font-size:12px;text-decoration:none">{{buttonUrl}}</a></p>
+
 </td></tr>
 
 <!-- Footer -->
-<tr><td class="footer-wrap footer-cell" style="padding:24px 36px;background:#FAFBFC;border-top:1px solid #F3F4F6;text-align:center">
-<p class="footer-text" style="margin:0 0 10px;font-size:13px;color:#4B5563;font-weight:600">{{footerText}}</p>
-<p style="margin:0 0 14px;font-size:12px">
-<a href="{{socialInstagramUrl}}" style="color:#6B7280;text-decoration:none;margin:0 8px;font-weight:600">Instagram</a>
-<a href="{{socialFacebookUrl}}" style="color:#6B7280;text-decoration:none;margin:0 8px;font-weight:600">Facebook</a>
-<a href="{{socialXUrl}}" style="color:#6B7280;text-decoration:none;margin:0 8px;font-weight:600">X</a>
+<tr><td class="footer-wrap footer-cell" style="padding:32px 32px 28px;background:#4CAF50;border-top:none">
+
+<!-- Mini logo + tagline -->
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:20px">
+<tr><td align="center">
+<img src="{{logoUrl}}" width="28" height="28" alt="{{brandName}}" style="border-radius:6px;display:block;margin:0 auto 10px">
+<p style="margin:0;font-size:13px;color:#E5E5E5;font-weight:600;line-height:1.4">{{footerText}}</p>
+</td></tr>
+</table>
+
+<!-- Social icons -->
+<table role="presentation" cellspacing="0" cellpadding="0" align="center" style="margin-bottom:20px">
+<tr>
+<td style="padding:0 6px"><a href="{{socialInstagramUrl}}" style="display:inline-block;width:36px;height:36px;line-height:36px;text-align:center;background:#2D2D2D;border-radius:50%;text-decoration:none;font-size:14px;color:#FFFFFF">&#9679;</a></td>
+<td style="padding:0 6px"><a href="{{socialFacebookUrl}}" style="display:inline-block;width:36px;height:36px;line-height:36px;text-align:center;background:#2D2D2D;border-radius:50%;text-decoration:none;font-size:14px;color:#FFFFFF">f</a></td>
+<td style="padding:0 6px"><a href="{{socialXUrl}}" style="display:inline-block;width:36px;height:36px;line-height:36px;text-align:center;background:#2D2D2D;border-radius:50%;text-decoration:none;font-size:14px;color:#FFFFFF">&#120143;</a></td>
+</tr>
+</table>
+
+<!-- Divider -->
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:16px">
+<tr><td style="height:1px;background:rgba(255,255,255,.15);font-size:0;line-height:0">&nbsp;</td></tr>
+</table>
+
+<!-- Links -->
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+<tr><td align="center">
+<p style="margin:0 0 10px;font-size:12px;line-height:1">
+<a class="footer-link" href="{{privacyUrl}}" style="color:#FFFFFF;text-decoration:none">Privacy</a>
+<span style="color:rgba(255,255,255,.4);margin:0 10px">&bull;</span>
+<a class="footer-link" href="{{termsUrl}}" style="color:#FFFFFF;text-decoration:none">Terms</a>
+<span style="color:rgba(255,255,255,.4);margin:0 10px">&bull;</span>
+<a class="footer-link" href="{{contactUrl}}" style="color:#FFFFFF;text-decoration:none">Contact</a>
 </p>
-<p style="margin:0 0 6px;font-size:11px;color:#9CA3AF">
-<a href="{{privacyUrl}}" style="color:#9CA3AF;text-decoration:none">Privacy</a> &middot;
-<a href="{{termsUrl}}" style="color:#9CA3AF;text-decoration:none">Terms</a> &middot;
-<a href="{{contactUrl}}" style="color:#9CA3AF;text-decoration:none">Contact</a>
-</p>
-<p style="margin:0;font-size:10px;color:#D1D5DB">&copy; {{currentYear}} {{companyName}}. All rights reserved.</p>
+<p style="margin:0;font-size:10px;color:rgba(255,255,255,.7)">&copy; {{currentYear}} {{companyName}}</p>
+</td></tr>
+</table>
+
 </td></tr>
 
 </table>

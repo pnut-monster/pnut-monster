@@ -89,8 +89,8 @@ export default function AdminLoginPage() {
         .from("app_settings")
         .select("value")
         .eq("key", "require_2fa")
-        .single();
-      const is2faRequired = mfaSetting?.value !== "false";
+        .maybeSingle();
+      const is2faRequired = !mfaSetting || mfaSetting.value !== "false";
 
       if (!is2faRequired) {
         toast.success("Logged in successfully.");
@@ -194,8 +194,8 @@ export default function AdminLoginPage() {
         .from("app_settings")
         .select("value")
         .eq("key", "require_2fa")
-        .single();
-      const is2faRequiredPk = mfaSettingPk?.value !== "false";
+        .maybeSingle();
+      const is2faRequiredPk = !mfaSettingPk || mfaSettingPk.value !== "false";
 
       if (!is2faRequiredPk) {
         toast.success("Logged in successfully.");

@@ -9,7 +9,7 @@ set search_path = ''
 as $$
   select
     case
-      when (select value from public.app_settings where key = 'require_2fa') = 'false'
+      when coalesce((select value from public.app_settings where key = 'require_2fa'), 'true') = 'false'
         then true
       else coalesce((select auth.jwt() ->> 'aal') = 'aal2', false)
     end

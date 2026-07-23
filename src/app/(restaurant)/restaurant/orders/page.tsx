@@ -82,7 +82,7 @@ export default function RestaurantOrdersPage() {
     try {
       let query = supabase
         .from("orders")
-        .select("*, order_items(*)")
+        .select("*, order_items(*), profiles!orders_user_id_fkey(full_name, phone)")
         .in("status", ["pending", "confirmed", "preparing", "ready"])
         .order("created_at", { ascending: false });
 
@@ -93,11 +93,11 @@ export default function RestaurantOrdersPage() {
       const { data, error } = await query;
       if (error) throw error;
 
-      const typed = (data ?? []) as (Order & { order_items: OrderItem[] })[];
+      const typed = (data ?? []) as (Order & { order_items: OrderItem[]; profiles: { full_name: string | null; phone: string | null } | null })[];
       const queue: QueueOrder[] = typed.map((o) => ({
         ...o,
         items: o.order_items,
-        customer_name: "Customer",
+        customer_name: o.profiles?.full_name || "Customer",
       }));
 
       if (autoAcceptRef.current) {

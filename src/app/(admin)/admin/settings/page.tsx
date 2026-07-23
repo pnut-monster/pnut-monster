@@ -11,6 +11,7 @@ import {
   Info,
   Save,
   ShieldCheck,
+  Mail,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -19,9 +20,11 @@ export default function AdminSettingsPage() {
   const [packagingCharge, setPackagingCharge] = useState("");
   const [packagingMode, setPackagingMode] = useState<"per_order" | "per_item">("per_order");
   const [require2fa, setRequire2fa] = useState(true);
+  const [saving2fa, setSaving2fa] = useState(false);
+  const [mfaUserEmail, setMfaUserEmail] = useState("");
+  const [savingMfaEmail, setSavingMfaEmail] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [saving2fa, setSaving2fa] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
@@ -29,13 +32,14 @@ export default function AdminSettingsPage() {
       const { data } = await supabase
         .from("app_settings")
         .select("key, value")
-        .in("key", ["tax_rate", "packaging_charge", "packaging_mode", "require_2fa"]);
+        .in("key", ["tax_rate", "packaging_charge", "packaging_mode", "require_2fa", "mfa_user_email"]);
       if (data) {
         for (const row of data as { key: string; value: string }[]) {
           if (row.key === "tax_rate") setTaxRate(String(parseFloat(row.value) * 100));
           if (row.key === "packaging_charge") setPackagingCharge(row.value);
           if (row.key === "packaging_mode") setPackagingMode(row.value as "per_order" | "per_item");
           if (row.key === "require_2fa") setRequire2fa(row.value !== "false");
+          if (row.key === "mfa_user_email") setMfaUserEmail(row.value);
         }
       }
       setLoading(false);
@@ -75,6 +79,50 @@ export default function AdminSettingsPage() {
       toast.success("Settings saved successfully");
     }
     setSaving(false);
+  };
+
+  const handleToggle2fa = async () => {
+    setSaving2fa(true);
+    const newValue = !require2fa;
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "require_2fa", value: String(newValue) }),
+      });
+      if (!res.ok) {
+        const body = await res.json();
+        throw new Error(body.error || "Failed to update");
+      }
+      setRequire2fa(newValue);
+      toast.success(
+        newValue
+          ? "Two-factor authentication enabled"
+          : "Two-factor authentication disabled"
+      );
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to update 2FA setting");
+    }
+    setSaving2fa(false);
+  };
+
+  const handleSaveMfaEmail = async () => {
+    setSavingMfaEmail(true);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "mfa_user_email", value: mfaUserEmail.trim() }),
+      });
+      if (!res.ok) {
+        const body = await res.json();
+        throw new Error(body.error || "Failed to update");
+      }
+      toast.success("Authentication user email updated");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to update email");
+    }
+    setSavingMfaEmail(false);
   };
 
   if (loading) {
@@ -194,25 +242,7 @@ export default function AdminSettingsPage() {
           <button
             type="button"
             disabled={saving2fa}
-            onClick={async () => {
-              setSaving2fa(true);
-              const newValue = !require2fa;
-              const { error } = await supabase
-                .from("app_settings")
-                .update({ value: String(newValue), updated_at: new Date().toISOString() } as never)
-                .eq("key", "require_2fa");
-              if (error) {
-                toast.error("Failed to update 2FA setting");
-              } else {
-                setRequire2fa(newValue);
-                toast.success(
-                  newValue
-                    ? "Two-factor authentication enabled"
-                    : "Two-factor authentication disabled"
-                );
-              }
-              setSaving2fa(false);
-            }}
+            onClick={handleToggle2fa}
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
               require2fa ? "bg-green-500" : "bg-brand-gray-300"
             } ${saving2fa ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
@@ -233,6 +263,34 @@ export default function AdminSettingsPage() {
             </p>
           </div>
         )}
+
+        <div className="mt-6 pt-4 border-t border-brand-gray-100">
+          <p className="text-sm font-medium text-brand-black">
+            Authentication User (receives 2FA codes)
+          </p>
+          <p className="text-xs text-brand-gray-400 mt-0.5 mb-3">
+            Change the email of the user whose authenticator app is used for admin 2FA verification
+          </p>
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <Input
+                type="email"
+                value={mfaUserEmail}
+                onChange={(e) => setMfaUserEmail(e.target.value)}
+                placeholder="admin@pnutmonster.com"
+                icon={<Mail className="w-4 h-4" />}
+              />
+            </div>
+            <Button
+              size="sm"
+              loading={savingMfaEmail}
+              onClick={handleSaveMfaEmail}
+            >
+              <Save className="w-4 h-4" />
+              Save
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* App Info */}
