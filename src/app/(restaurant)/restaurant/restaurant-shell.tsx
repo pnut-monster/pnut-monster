@@ -166,27 +166,49 @@ export function RestaurantShell({
     }
   }, [isLoginPage]);
 
+  const playNewOrderSoundRef = useRef(playNewOrderSound);
+  playNewOrderSoundRef.current = playNewOrderSound;
+
   useEffect(() => {
     if (isLoginPage || !selectedOutlet) return;
+    const outletId = selectedOutlet.id;
     const channel = supabase
-      .channel("restaurant-new-orders-" + selectedOutlet.id)
+      .channel("restaurant-orders-" + outletId)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "orders", filter: `outlet_id=eq.${selectedOutlet.id}` },
+        { event: "INSERT", schema: "public", table: "orders" },
         (payload) => {
           const order = payload.new as Order;
-          void playNewOrderSound();
+          if (order.outlet_id !== outletId) return;
+          void playNewOrderSoundRef.current();
           toast.success(
             `New order #${order.order_number}${order.total ? ` • ₹${Number(order.total).toFixed(2)}` : ""}`,
             { duration: 8000, icon: "🔔" }
           );
         }
       )
-      .subscribe();
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "orders" },
+        (payload) => {
+          const order = payload.new as Order;
+          if (order.outlet_id !== outletId) return;
+          if (order.status === "pending") return;
+          toast(
+            `Order #${order.order_number} → ${order.status}`,
+            { duration: 5000, icon: "📋" }
+          );
+        }
+      )
+      .subscribe((status) => {
+        if (status === "CHANNEL_ERROR") {
+          console.error("[Restaurant Realtime] Channel error for outlet", outletId);
+        }
+      });
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [isLoginPage, selectedOutlet, playNewOrderSound, supabase]);
+  }, [isLoginPage, selectedOutlet, supabase]);
 
   useEffect(() => () => {
     void audioContextRef.current?.close();

@@ -457,48 +457,46 @@ export default function LoyaltyPage() {
     setClaimingSlug(actionSlug);
     try {
       let refId = actionSlug + "_" + Date.now();
-      let customPoints: number | null = null;
 
-      // For order_placed, use actual order ID and calculate % of order total
+      // For order_placed, use actual order ID (backend computes points from order total)
       if (actionSlug === "order_placed" && ratedUnclaimedOrders.length > 0) {
-        const order = ratedUnclaimedOrders[0];
-        refId = order.id;
-        customPoints = Math.round(order.total * pctOrderPlaced / 100);
-        if (customPoints < 1) customPoints = 1;
+        refId = ratedUnclaimedOrders[0].id;
       }
 
-      // For wallet_topup, use actual topup ID and calculate % of topup amount
+      // For wallet_topup, use actual topup ID (backend computes points from topup amount)
       if (actionSlug === "wallet_topup" && unclaimedTopupsList.length > 0) {
-        const topup = unclaimedTopupsList[0];
-        refId = topup.id;
-        customPoints = Math.round(topup.amount * pctWalletTopup / 100);
-        if (customPoints < 1) customPoints = 1;
+        refId = unclaimedTopupsList[0].id;
       }
 
       if (actionSlug === "referral") {
-        const { error } = await supabase.rpc("claim_referral_reward" as never);
+        const { data: rpcData, error } = await supabase.rpc("claim_referral_reward" as never);
 
         if (error) {
           toast.error(error.message);
           return;
         }
 
-        toast.success("Points claimed successfully!");
+        const result = rpcData as { success: boolean; message?: string; points_awarded?: number } | null;
+        if (result && !result.success) {
+          toast.error(result.message || "Could not claim referral points");
+          return;
+        }
+
+        toast.success(
+          result?.points_awarded
+            ? `+${result.points_awarded} referral points claimed!`
+            : "Referral points claimed!"
+        );
         setLoading(true);
         await fetchData();
         return;
       }
 
-      const rpcParams: Record<string, unknown> = {
+      const { data, error } = await supabase.rpc("award_loyalty_points" as never, {
         p_user_id: userId,
         p_action_slug: actionSlug,
         p_reference_id: refId,
-      };
-      if (customPoints !== null) {
-        rpcParams.p_custom_points = customPoints;
-      }
-
-      const { data, error } = await supabase.rpc("award_loyalty_points" as never, rpcParams as never);
+      } as never);
 
       if (error) {
         toast.error(error.message);

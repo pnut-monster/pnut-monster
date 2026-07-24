@@ -45,6 +45,7 @@ import { createClient } from "@supabase/supabase-js";
 import { consumeRateLimit } from "@/lib/security/rate-limit";
 
 describe("POST /api/razorpay/wallet-topup", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockSupabase: any;
 
   beforeEach(() => {
@@ -71,6 +72,7 @@ describe("POST /api/razorpay/wallet-topup", () => {
       })),
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(createClient).mockReturnValue(mockSupabase as any);
   });
 

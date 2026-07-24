@@ -1,5 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { POST } from "@/app/api/razorpay/create-order/route";
 
 // Mock modules
@@ -31,7 +31,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { consumeRateLimit } from "@/lib/security/rate-limit";
 
 describe("POST /api/razorpay/create-order", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockSupabase: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockAdmin: any;
 
   beforeEach(() => {
@@ -59,7 +61,9 @@ describe("POST /api/razorpay/create-order", () => {
       })),
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(createClient).mockResolvedValue(mockSupabase as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(createAdminClient).mockReturnValue(mockAdmin as any);
   });
 

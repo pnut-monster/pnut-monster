@@ -144,16 +144,16 @@ export default function RestaurantOrdersPage() {
 
     try {
       channel = supabase
-        .channel("restaurant-orders")
+        .channel("restaurant-orders-live")
         .on(
           "postgres_changes" as never,
           {
             event: "*",
             schema: "public",
             table: "orders",
-            filter: outletId ? `outlet_id=eq.${outletId}` : undefined,
           } as never,
           (payload: { eventType: string; new: Order }) => {
+            if (outletId && payload.new.outlet_id !== outletId) return;
             if (payload.eventType === "INSERT") {
               playNotificationSound();
               if (autoAcceptRef.current && payload.new.status === "pending") {
@@ -183,7 +183,11 @@ export default function RestaurantOrdersPage() {
             }
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          if (status === "CHANNEL_ERROR") {
+            console.error("[Restaurant Orders] Realtime channel error");
+          }
+        });
     } catch {
       // Realtime not available in dev
     }

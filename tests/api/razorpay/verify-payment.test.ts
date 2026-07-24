@@ -54,7 +54,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { consumeRateLimit } from "@/lib/security/rate-limit";
 
 describe("POST /api/razorpay/verify-payment", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockSupabase: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockAdmin: any;
 
   beforeEach(() => {
@@ -96,7 +98,9 @@ describe("POST /api/razorpay/verify-payment", () => {
       rpc: vi.fn(),
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(createClient).mockReturnValue(mockSupabase as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(createAdminClient).mockReturnValue(mockAdmin as any);
   });
 

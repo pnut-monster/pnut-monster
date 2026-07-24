@@ -1,3 +1,4 @@
+import { withSentryConfig } from "@sentry/nextjs";
 import withSerwistInit from "@serwist/next";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -18,7 +19,7 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "connect-src 'self' https: wss: http://127.0.0.1:54331 ws://127.0.0.1:54331",
+  "connect-src 'self' https: wss: http://127.0.0.1:54331 ws://127.0.0.1:54331 https://*.ingest.sentry.io",
   "frame-src https://api.razorpay.com https://checkout.razorpay.com",
   "worker-src 'self' blob:",
   ...(isDev ? [] : ["upgrade-insecure-requests"]),
@@ -88,4 +89,11 @@ const nextConfig = {
   },
 };
 
-export default withSerwist(nextConfig);
+export default withSentryConfig(withSerwist(nextConfig), {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+  disableLogger: true,
+  automaticVercelMonitors: false,
+});
