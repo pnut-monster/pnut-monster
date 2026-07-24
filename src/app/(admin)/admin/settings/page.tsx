@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { APP_NAME } from "@/lib/utils/constants";
 import { Input, Button, Spinner } from "@/components/ui";
@@ -11,9 +12,15 @@ import {
   Info,
   Save,
   ShieldCheck,
-  Mail,
+  Smartphone,
+  KeyRound,
+  AlertCircle,
+  CheckCircle2,
+  X,
 } from "lucide-react";
 import toast from "react-hot-toast";
+
+type DeviceChangeStep = "idle" | "verify" | "scan" | "confirm" | "done";
 
 export default function AdminSettingsPage() {
   const [taxRate, setTaxRate] = useState("");
@@ -21,10 +28,20 @@ export default function AdminSettingsPage() {
   const [packagingMode, setPackagingMode] = useState<"per_order" | "per_item">("per_order");
   const [require2fa, setRequire2fa] = useState(true);
   const [saving2fa, setSaving2fa] = useState(false);
-  const [mfaUserEmail, setMfaUserEmail] = useState("");
-  const [savingMfaEmail, setSavingMfaEmail] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Change 2FA device state
+  const [deviceStep, setDeviceStep] = useState<DeviceChangeStep>("idle");
+  const [devicePassword, setDevicePassword] = useState("");
+  const [deviceCurrentCode, setDeviceCurrentCode] = useState("");
+  const [deviceNewCode, setDeviceNewCode] = useState("");
+  const [deviceQrCode, setDeviceQrCode] = useState("");
+  const [deviceSecret, setDeviceSecret] = useState("");
+  const [deviceFactorId, setDeviceFactorId] = useState("");
+  const [deviceLoading, setDeviceLoading] = useState(false);
+  const [deviceError, setDeviceError] = useState("");
+
   const supabase = createClient();
 
   useEffect(() => {
@@ -32,14 +49,13 @@ export default function AdminSettingsPage() {
       const { data } = await supabase
         .from("app_settings")
         .select("key, value")
-        .in("key", ["tax_rate", "packaging_charge", "packaging_mode", "require_2fa", "mfa_user_email"]);
+        .in("key", ["tax_rate", "packaging_charge", "packaging_mode", "require_2fa"]);
       if (data) {
         for (const row of data as { key: string; value: string }[]) {
           if (row.key === "tax_rate") setTaxRate(String(parseFloat(row.value) * 100));
           if (row.key === "packaging_charge") setPackagingCharge(row.value);
           if (row.key === "packaging_mode") setPackagingMode(row.value as "per_order" | "per_item");
           if (row.key === "require_2fa") setRequire2fa(row.value !== "false");
-          if (row.key === "mfa_user_email") setMfaUserEmail(row.value);
         }
       }
       setLoading(false);
@@ -106,23 +122,82 @@ export default function AdminSettingsPage() {
     setSaving2fa(false);
   };
 
-  const handleSaveMfaEmail = async () => {
-    setSavingMfaEmail(true);
-    try {
-      const res = await fetch("/api/admin/settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: "mfa_user_email", value: mfaUserEmail.trim() }),
-      });
-      if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.error || "Failed to update");
-      }
-      toast.success("Authentication user email updated");
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to update email");
+  const resetDeviceChange = () => {
+    setDeviceStep("idle");
+    setDevicePassword("");
+    setDeviceCurrentCode("");
+    setDeviceNewCode("");
+    setDeviceQrCode("");
+    setDeviceSecret("");
+    setDeviceFactorId("");
+    setDeviceLoading(false);
+    setDeviceError("");
+  };
+
+  const handleVerifyIdentity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!devicePassword) {
+      setDeviceError("Password is required");
+      return;
     }
-    setSavingMfaEmail(false);
+    if (!/^\d{6}$/.test(deviceCurrentCode)) {
+      setDeviceError("Enter a valid 6-digit code from your current authenticator");
+      return;
+    }
+
+    setDeviceLoading(true);
+    setDeviceError("");
+    try {
+      const res = await fetch("/api/admin/change-2fa-device", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          step: "verify-identity",
+          password: devicePassword,
+          totpCode: deviceCurrentCode,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Verification failed");
+
+      setDeviceQrCode(data.qrCode);
+      setDeviceSecret(data.secret);
+      setDeviceFactorId(data.factorId);
+      setDeviceStep("scan");
+    } catch (err: unknown) {
+      setDeviceError(err instanceof Error ? err.message : "Verification failed");
+    }
+    setDeviceLoading(false);
+  };
+
+  const handleConfirmNewDevice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!/^\d{6}$/.test(deviceNewCode)) {
+      setDeviceError("Enter the 6-digit code from your new authenticator");
+      return;
+    }
+
+    setDeviceLoading(true);
+    setDeviceError("");
+    try {
+      const res = await fetch("/api/admin/change-2fa-device", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          step: "confirm-new-device",
+          factorId: deviceFactorId,
+          totpCode: deviceNewCode,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Confirmation failed");
+
+      setDeviceStep("done");
+      toast.success(data.message);
+    } catch (err: unknown) {
+      setDeviceError(err instanceof Error ? err.message : "Confirmation failed");
+    }
+    setDeviceLoading(false);
   };
 
   if (loading) {
@@ -265,33 +340,181 @@ export default function AdminSettingsPage() {
         )}
 
         <div className="mt-6 pt-4 border-t border-brand-gray-100">
-          <p className="text-sm font-medium text-brand-black">
-            Authentication User (receives 2FA codes)
-          </p>
-          <p className="text-xs text-brand-gray-400 mt-0.5 mb-3">
-            Change the email of the user whose authenticator app is used for admin 2FA verification
-          </p>
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <Input
-                type="email"
-                value={mfaUserEmail}
-                onChange={(e) => setMfaUserEmail(e.target.value)}
-                placeholder="admin@pnutmonster.com"
-                icon={<Mail className="w-4 h-4" />}
-              />
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-brand-black">
+                Change 2FA Device
+              </p>
+              <p className="text-xs text-brand-gray-400 mt-0.5">
+                Transfer your authenticator to a new phone by generating a new QR code
+              </p>
             </div>
             <Button
               size="sm"
-              loading={savingMfaEmail}
-              onClick={handleSaveMfaEmail}
+              variant="secondary"
+              onClick={() => setDeviceStep("verify")}
             >
-              <Save className="w-4 h-4" />
-              Save
+              <Smartphone className="w-4 h-4" />
+              Change Device
             </Button>
           </div>
         </div>
       </div>
+
+      {/* Change 2FA Device Modal */}
+      {deviceStep !== "idle" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl relative max-h-[90vh] overflow-y-auto">
+            <button
+              type="button"
+              onClick={resetDeviceChange}
+              className="absolute top-4 right-4 text-brand-gray-400 hover:text-brand-gray-700"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {deviceStep === "verify" && (
+              <>
+                <div className="text-center mb-6">
+                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-brand-yellow/15">
+                    <ShieldCheck className="h-6 w-6 text-brand-yellow-dark" />
+                  </div>
+                  <h3 className="font-[family-name:var(--font-heading)] text-lg font-bold">
+                    Verify Your Identity
+                  </h3>
+                  <p className="mt-1 text-sm text-brand-gray-500">
+                    Enter your password and current 2FA code to proceed
+                  </p>
+                </div>
+
+                <form onSubmit={handleVerifyIdentity} className="space-y-4">
+                  <Input
+                    label="Password"
+                    type="password"
+                    value={devicePassword}
+                    onChange={(e) => setDevicePassword(e.target.value)}
+                    placeholder="Enter your password"
+                    autoComplete="current-password"
+                  />
+                  <Input
+                    label="Current 2FA Code"
+                    value={deviceCurrentCode}
+                    onChange={(e) =>
+                      setDeviceCurrentCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                    }
+                    inputMode="numeric"
+                    placeholder="000000"
+                    maxLength={6}
+                    className="text-center font-mono text-lg tracking-[0.3em]"
+                    autoComplete="one-time-code"
+                  />
+
+                  {deviceError && (
+                    <div className="flex gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                      <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                      {deviceError}
+                    </div>
+                  )}
+
+                  <Button type="submit" loading={deviceLoading} className="w-full">
+                    Verify Identity
+                  </Button>
+                </form>
+              </>
+            )}
+
+            {deviceStep === "scan" && (
+              <>
+                <div className="text-center mb-6">
+                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-blue-50">
+                    <Smartphone className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <h3 className="font-[family-name:var(--font-heading)] text-lg font-bold">
+                    Set Up New Device
+                  </h3>
+                  <p className="mt-1 text-sm text-brand-gray-500">
+                    Scan this QR code with your new authenticator app
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="mx-auto w-fit rounded-xl border bg-white p-3">
+                    <Image
+                      src={deviceQrCode}
+                      alt="New authenticator QR code"
+                      width={200}
+                      height={200}
+                      unoptimized
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(deviceSecret);
+                      toast.success("Setup key copied");
+                    }}
+                    className="flex w-full items-center justify-center gap-2 break-all rounded-lg bg-brand-gray-50 px-3 py-2 font-mono text-xs hover:bg-brand-gray-100 transition-colors"
+                  >
+                    <KeyRound className="h-4 w-4 shrink-0" />
+                    {deviceSecret}
+                  </button>
+                  <p className="text-xs text-center text-brand-gray-400">
+                    Or enter this key manually in your authenticator app
+                  </p>
+
+                  <form onSubmit={handleConfirmNewDevice} className="space-y-4 pt-2">
+                    <Input
+                      label="Code from new authenticator"
+                      value={deviceNewCode}
+                      onChange={(e) =>
+                        setDeviceNewCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                      }
+                      inputMode="numeric"
+                      placeholder="000000"
+                      maxLength={6}
+                      className="text-center font-mono text-lg tracking-[0.3em]"
+                      autoComplete="one-time-code"
+                      autoFocus
+                    />
+
+                    {deviceError && (
+                      <div className="flex gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                        <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                        {deviceError}
+                      </div>
+                    )}
+
+                    <Button type="submit" loading={deviceLoading} className="w-full">
+                      Confirm New Device
+                    </Button>
+                  </form>
+                </div>
+              </>
+            )}
+
+            {deviceStep === "done" && (
+              <div className="text-center py-4">
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-50">
+                  <CheckCircle2 className="h-7 w-7 text-green-600" />
+                </div>
+                <h3 className="font-[family-name:var(--font-heading)] text-lg font-bold">
+                  Device Changed Successfully
+                </h3>
+                <p className="mt-2 text-sm text-brand-gray-500">
+                  Your 2FA has been transferred to the new device. All future login codes must be generated using your newly enrolled authenticator app.
+                </p>
+                <p className="mt-3 text-xs text-amber-600 font-medium">
+                  The previous authenticator device has been invalidated.
+                </p>
+                <Button className="mt-6 w-full" onClick={resetDeviceChange}>
+                  Done
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* App Info */}
       <div className="bg-white rounded-xl shadow-sm border border-brand-gray-100 p-6">

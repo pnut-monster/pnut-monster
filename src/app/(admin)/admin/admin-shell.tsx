@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   Volume2,
   VolumeX,
+  Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils/helpers";
 import toast from "react-hot-toast";
@@ -38,6 +39,7 @@ const SIDEBAR_ITEMS = [
   { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
   { href: "/admin/menu", label: "Menu", icon: UtensilsCrossed },
   { href: "/admin/outlets", label: "Outlets", icon: MapPin },
+  { href: "/admin/inventory", label: "Inventory", icon: Package },
   { href: "/admin/coupons", label: "Coupons", icon: Ticket },
   { href: "/admin/gift-cards", label: "Gift Cards", icon: Gift },
   { href: "/admin/campaigns", label: "Campaigns", icon: Megaphone },

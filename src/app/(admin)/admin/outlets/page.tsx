@@ -20,6 +20,7 @@ import {
   UserPlus,
   DoorOpen,
   DoorClosed,
+  Package,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -500,6 +501,13 @@ export default function AdminOutletsPage() {
                     >
                       <Users className="w-4 h-4" />
                     </button>
+                    <a
+                      href={`/admin/inventory?outlet=${outlet.id}`}
+                      className="p-1.5 rounded-lg hover:bg-brand-gray-100 text-brand-gray-500 transition-colors"
+                      title="Inventory"
+                    >
+                      <Package className="w-4 h-4" />
+                    </a>
                     <a
                       href={`/admin/orders?outlet=${outlet.id}`}
                       className="p-1.5 rounded-lg hover:bg-brand-gray-100 text-brand-gray-500 transition-colors"
