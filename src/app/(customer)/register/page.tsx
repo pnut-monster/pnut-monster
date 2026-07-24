@@ -4,7 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Mail, Lock, User, ArrowRight, Loader2, Eye, EyeOff, Phone, CheckSquare, Square } from "lucide-react";
+import { Mail, Lock, User, ArrowRight, Loader2, Eye, EyeOff, Phone, CheckSquare, Square, KeyRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import toast from "react-hot-toast";
 
@@ -21,9 +21,66 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  // OTP verification state (shown after signup when email confirmation is required)
+  const [otpStep, setOtpStep] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [otpLoading, setOtpLoading] = useState(false);
+
   const handleGoogleSignUp = async () => {
     setGoogleLoading(true);
     window.location.assign("/auth/google?next=/");
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otp.trim() || otp.length !== 6) {
+      toast.error("Please enter the 6-digit code");
+      return;
+    }
+    setOtpLoading(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.verifyOtp({
+        email: email.trim(),
+        token: otp.trim(),
+        type: "magiclink",
+      });
+      if (error) {
+        if (error.message.toLowerCase().includes("expired")) {
+          toast.error("Code expired. Please request a new one.");
+        } else {
+          toast.error("Invalid code. Please try again.");
+        }
+        return;
+      }
+      toast.success("Account verified! Welcome aboard!");
+      router.replace("/profile-setup");
+    } catch {
+      toast.error("Something went wrong. Please try again.");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setOtpLoading(true);
+    try {
+      const res = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      if (res.ok) {
+        toast.success("New code sent!");
+        setOtp("");
+      } else {
+        toast.error("Could not resend code. Try again later.");
+      }
+    } catch {
+      toast.error("Something went wrong.");
+    } finally {
+      setOtpLoading(false);
+    }
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -73,13 +130,21 @@ export default function RegisterPage() {
         return;
       }
 
-      // If email confirmation is required, redirect to verify page
       if (data.user && !data.session) {
-        toast.success("Signup successful. Please check your email to verify your account.");
-        sessionStorage.setItem("pnut_verify_email", email.trim());
-        router.push("/verify");
+        // Email confirmation required — send OTP for verification
+        const res = await fetch("/api/auth/send-otp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: email.trim() }),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          toast.error(errData.error || "Could not send verification code");
+          return;
+        }
+        toast.success("We've sent a verification code to your email");
+        setOtpStep(true);
       } else {
-        // Auto-logged in (email confirmation disabled)
         toast.success("Account created! Welcome aboard!");
         router.replace("/profile-setup");
       }
@@ -89,6 +154,75 @@ export default function RegisterPage() {
       setLoading(false);
     }
   };
+
+  if (otpStep) {
+    return (
+      <div className="min-h-dvh bg-[#FAFBFC] flex flex-col">
+        <div className="flex-shrink-0 pt-10 pb-4 px-6 text-center">
+          <Image
+            src="/logo.webp"
+            alt="PNUT MONSTER"
+            width={96}
+            height={96}
+            priority
+            className="mx-auto mb-1 object-contain"
+          />
+        </div>
+        <div className="flex-1 bg-white rounded-t-3xl px-6 pt-8 pb-6 shadow-lg">
+          <div className="w-14 h-14 bg-brand-yellow/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <KeyRound className="w-7 h-7 text-brand-yellow-dark" />
+          </div>
+          <h2 className="font-heading text-2xl font-bold text-brand-black mb-1 text-center">
+            Verify your email
+          </h2>
+          <p className="text-brand-gray-600 text-sm mb-6 text-center">
+            Enter the 6-digit code sent to <span className="font-semibold text-brand-black">{email}</span>
+          </p>
+
+          <form onSubmit={handleVerifyOtp} className="space-y-4">
+            <div>
+              <label htmlFor="otp" className="block text-xs font-bold text-brand-gray-500 uppercase tracking-wider mb-2">
+                Verification Code
+              </label>
+              <div className="flex items-center border border-brand-gray-200 rounded-xl focus-within:border-brand-yellow transition-colors bg-white">
+                <div className="flex items-center pl-3 pr-2">
+                  <KeyRound className="w-4 h-4 text-brand-gray-400" />
+                </div>
+                <input
+                  id="otp"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="000000"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  className="flex-1 px-2 py-3 text-lg bg-transparent outline-none placeholder:text-brand-gray-400 tracking-[0.4em] font-bold text-center"
+                  autoComplete="one-time-code"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <button
+              type="submit"
+              disabled={otpLoading || otp.length !== 6}
+              className="w-full flex items-center justify-center gap-2 bg-brand-yellow text-brand-black font-bold py-3.5 rounded-xl text-sm hover:bg-brand-yellow-dark hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+            >
+              {otpLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Verify & Continue <ArrowRight className="w-4 h-4" /></>}
+            </button>
+          </form>
+
+          <button
+            type="button"
+            onClick={handleResendOtp}
+            disabled={otpLoading}
+            className="w-full text-sm font-semibold text-brand-gray-500 hover:text-brand-black transition-colors mt-4"
+          >
+            Didn&apos;t receive the code? Resend
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-dvh bg-[#FAFBFC] flex flex-col">

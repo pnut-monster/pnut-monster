@@ -317,30 +317,37 @@ export default function AdminInventoryPage() {
       is_active: true,
     };
 
-    try {
-      if (editingItem) {
-        const { error } = await supabase
-          .from("inventory_items" as never)
-          .update(payload as never)
-          .eq("id" as never, editingItem.id as never);
-        if (error) throw error;
-        toast.success("Item updated");
-      } else {
-        const { error } = await supabase
-          .from("inventory_items" as never)
-          .insert(payload as never);
-        if (error) throw error;
-        toast.success("Item added");
+    if (editingItem) {
+      const { error } = await supabase
+        .from("inventory_items" as never)
+        .update(payload as never)
+        .eq("id" as never, editingItem.id as never);
+      if (error) {
+        const msg = error.message || "Save failed";
+        if (msg.includes("idx_inventory_items_outlet_name")) {
+          toast.error("An item with this name already exists in this outlet");
+        } else {
+          toast.error(msg);
+        }
+        setSaving(false);
+        return;
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Save failed";
-      if (msg.includes("idx_inventory_items_outlet_name")) {
-        toast.error("An item with this name already exists in this outlet");
-      } else {
-        toast.error(msg);
+      toast.success("Item updated");
+    } else {
+      const { error } = await supabase
+        .from("inventory_items" as never)
+        .insert(payload as never);
+      if (error) {
+        const msg = error.message || "Save failed";
+        if (msg.includes("idx_inventory_items_outlet_name")) {
+          toast.error("An item with this name already exists in this outlet");
+        } else {
+          toast.error(msg);
+        }
+        setSaving(false);
+        return;
       }
-      setSaving(false);
-      return;
+      toast.success("Item added");
     }
 
     setSaving(false);
@@ -406,6 +413,29 @@ export default function AdminInventoryPage() {
     }
   };
 
+  // --- Low Stock Email Alert ---
+  const sendLowStockEmail = async (item: InventoryItem, newQuantity: number) => {
+    if (newQuantity > item.min_stock_level || item.min_stock_level <= 0) return;
+    const outlet = outlets.find((o) => o.id === selectedOutlet);
+    try {
+      await fetch("/api/admin/inventory-alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inventory_item_id: item.id,
+          item_name: item.name,
+          quantity: newQuantity,
+          min_stock_level: item.min_stock_level,
+          unit: item.unit,
+          outlet_name: outlet?.name || "Unknown",
+          outlet_id: selectedOutlet,
+        }),
+      });
+    } catch {
+      // Email alert is non-blocking
+    }
+  };
+
   // --- Stock Update ---
   const handleStockUpdate = async () => {
     if (!stockItem || !stockQuantity) return;
@@ -447,6 +477,7 @@ export default function AdminInventoryPage() {
       if (logError) throw logError;
 
       toast.success(`Stock ${isAddition ? "added" : "deducted"} successfully`);
+      sendLowStockEmail(item, newQuantity);
       setStockItem("");
       setStockQuantity("");
       setStockNotes("");
@@ -484,6 +515,22 @@ export default function AdminInventoryPage() {
         toast.success(`Inventory deducted for ${qty} unit(s)`);
         setDeductMenuItem("");
         setDeductQuantity("1");
+        // Re-fetch and check for low stock items after deduction
+        const { data: updatedItems } = await supabase
+          .from("inventory_items" as never)
+          .select("*")
+          .eq("outlet_id" as never, selectedOutlet as never);
+        if (updatedItems) {
+          const updated = updatedItems as InventoryItem[];
+          updated.forEach((ui) => {
+            if (ui.quantity <= ui.min_stock_level && ui.min_stock_level > 0) {
+              const prev = items.find((old) => old.id === ui.id);
+              if (prev && prev.quantity > prev.min_stock_level) {
+                sendLowStockEmail(ui, ui.quantity);
+              }
+            }
+          });
+        }
         fetchItems();
       }
     } catch {
@@ -528,11 +575,35 @@ export default function AdminInventoryPage() {
         </div>
 
         {lowStockItems.length > 0 && (
-          <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-            <AlertTriangle className="w-4 h-4 text-red-500" />
+          <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
             <span className="text-xs font-semibold text-red-700">
               {lowStockItems.length} item{lowStockItems.length !== 1 ? "s" : ""} below minimum stock
             </span>
+            <button
+              onClick={async () => {
+                const outlet = outlets.find((o) => o.id === selectedOutlet);
+                for (const item of lowStockItems) {
+                  await fetch("/api/admin/inventory-alerts", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      inventory_item_id: item.id,
+                      item_name: item.name,
+                      quantity: item.quantity,
+                      min_stock_level: item.min_stock_level,
+                      unit: item.unit,
+                      outlet_name: outlet?.name || "Unknown",
+                      outlet_id: selectedOutlet,
+                    }),
+                  });
+                }
+                toast.success("Low stock alert emails sent");
+              }}
+              className="ml-auto text-xs font-medium text-red-600 hover:text-red-800 underline underline-offset-2 whitespace-nowrap"
+            >
+              Notify via Email
+            </button>
           </div>
         )}
       </div>
