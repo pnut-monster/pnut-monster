@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
 
     if (action === "insert" && payload) {
       const { data, error } = await admin
-        .from("inventory_items")
+        .from("inventory_items" as never)
         .insert(payload as never)
         .select()
         .single();
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
 
     if (action === "update" && item_id && payload) {
       const { data, error } = await admin
-        .from("inventory_items")
+        .from("inventory_items" as never)
         .update(payload as never)
         .eq("id", item_id)
         .select()
@@ -66,14 +66,14 @@ export async function POST(request: NextRequest) {
 
     if (action === "stock_update" && item_id && payload && log_payload) {
       const { error: updateError } = await admin
-        .from("inventory_items")
+        .from("inventory_items" as never)
         .update(payload as never)
         .eq("id", item_id);
       if (updateError) {
         return NextResponse.json({ error: updateError.message, code: updateError.code }, { status: 400 });
       }
       const { error: logError } = await admin
-        .from("inventory_logs")
+        .from("inventory_logs" as never)
         .insert({ ...log_payload, performed_by: user.id } as never);
       if (logError) {
         return NextResponse.json({ error: logError.message, code: logError.code }, { status: 400 });
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
 
     if (action === "delete" && item_id) {
       const { error } = await admin
-        .from("inventory_items")
+        .from("inventory_items" as never)
         .delete()
         .eq("id", item_id);
       if (error) {
@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
 
   const admin = createAdminClient();
   const { data, error } = await admin
-    .from("inventory_items")
+    .from("inventory_items" as never)
     .select("*")
     .eq("outlet_id", outletId)
     .order("category")
