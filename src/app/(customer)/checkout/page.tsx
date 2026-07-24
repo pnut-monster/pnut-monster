@@ -658,21 +658,38 @@ export default function CheckoutPage() {
                     (₹{(loyaltyUserBalance * loyaltyPointValue).toFixed(0)} value)
                   </span>
                 </span>
-                <label className="relative inline-flex items-center cursor-pointer">
+                {hasCouponDiscount ? (
                   <input
-                    type={hasCouponDiscount ? "radio" : "checkbox"}
-                    name={hasCouponDiscount ? "reward" : undefined}
+                    type="radio"
+                    name="reward"
                     checked={loyaltySelected}
-                    onChange={(e) => {
-                      setUseLoyalty(e.target.checked);
-                      setRewardOption(e.target.checked ? "loyalty" : "coupon");
+                    onChange={() => {
+                      setUseLoyalty(true);
+                      setRewardOption("loyalty");
                     }}
-                    className={hasCouponDiscount ? "w-4 h-4 text-brand-yellow accent-yellow-500" : "sr-only peer"}
+                    className="w-4 h-4 text-brand-yellow accent-yellow-500"
                   />
-                  {!hasCouponDiscount && (
-                    <div className="w-10 h-5 bg-brand-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-brand-yellow rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-yellow" />
-                  )}
-                </label>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !loyaltySelected;
+                      setUseLoyalty(next);
+                      setRewardOption(next ? "loyalty" : "coupon");
+                    }}
+                    className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors ${
+                      loyaltySelected ? "bg-brand-yellow" : "bg-brand-gray-200"
+                    }`}
+                    aria-pressed={loyaltySelected}
+                    role="switch"
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                        loyaltySelected ? "translate-x-5" : "translate-x-0.5"
+                      }`}
+                    />
+                  </button>
+                )}
               </div>
               {loyaltySelected && (
                 <div className="text-xs text-brand-green-dark bg-green-50 rounded-lg px-3 py-2">

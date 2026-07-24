@@ -498,14 +498,24 @@ export default function LoyaltyPage() {
         rpcParams.p_custom_points = customPoints;
       }
 
-      const { error } = await supabase.rpc("award_loyalty_points" as never, rpcParams as never);
+      const { data, error } = await supabase.rpc("award_loyalty_points" as never, rpcParams as never);
 
       if (error) {
         toast.error(error.message);
         return;
       }
 
-      toast.success("Points claimed successfully!");
+      const result = data as { success: boolean; error?: string; points_awarded?: number } | null;
+      if (result && !result.success) {
+        toast.error(result.error || "Could not claim points");
+        return;
+      }
+
+      toast.success(
+        result?.points_awarded
+          ? `+${result.points_awarded} points claimed!`
+          : "Points claimed successfully!"
+      );
       setLoading(true);
       await fetchData();
     } catch {

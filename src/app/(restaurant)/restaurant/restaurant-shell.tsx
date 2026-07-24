@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -15,10 +15,13 @@ import {
   ChevronRight,
   Bell,
   ChevronDown,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { cn } from "@/lib/utils/helpers";
 import { createClient } from "@/lib/supabase/client";
-import type { Outlet, Profile } from "@/lib/supabase/types";
+import type { Outlet, Order, Profile } from "@/lib/supabase/types";
+import toast from "react-hot-toast";
 
 const SIDEBAR_ITEMS = [
   { href: "/restaurant", label: "Dashboard", icon: LayoutDashboard },
@@ -46,10 +49,51 @@ export function RestaurantShell({
   const [staffProfile, setStaffProfile] = useState<Profile | null>(null);
   const [managedOutlets, setManagedOutlets] = useState<Outlet[]>([]);
   const [selectedOutlet, setSelectedOutlet] = useState<Outlet | null>(null);
+  const [orderSoundEnabled, setOrderSoundEnabled] = useState(() =>
+    typeof window === "undefined" || localStorage.getItem("pnut_restaurant_order_sound") !== "false"
+  );
+  const audioContextRef = useRef<AudioContext | null>(null);
   const pageTitle = getPageTitle(pathname);
+  const supabase = createClient();
 
   // Skip layout for login page
   const isLoginPage = pathname === "/restaurant/login";
+
+  const playNewOrderSound = useCallback(async (force = false) => {
+    if (!orderSoundEnabled && !force) return;
+    try {
+      const context = audioContextRef.current ?? new AudioContext();
+      audioContextRef.current = context;
+      if (context.state === "suspended") await context.resume();
+      const start = context.currentTime;
+      [660, 880, 1040].forEach((frequency, index) => {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.frequency.value = frequency;
+        gain.gain.setValueAtTime(0.0001, start + index * 0.16);
+        gain.gain.exponentialRampToValueAtTime(0.22, start + index * 0.16 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + index * 0.16 + 0.14);
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start(start + index * 0.16);
+        oscillator.stop(start + index * 0.16 + 0.15);
+      });
+    } catch (error) {
+      console.warn("[Restaurant] Could not play order notification sound", error);
+    }
+  }, [orderSoundEnabled]);
+
+  const toggleOrderSound = useCallback(() => {
+    const next = !orderSoundEnabled;
+    setOrderSoundEnabled(next);
+    localStorage.setItem("pnut_restaurant_order_sound", String(next));
+    if (next) {
+      void playNewOrderSound(true);
+      toast.success("New-order sound enabled");
+    } else {
+      toast("New-order sound muted", { icon: "🔕" });
+    }
+  }, [orderSoundEnabled, playNewOrderSound]);
 
   useEffect(() => {
     async function loadStaffData() {
@@ -122,15 +166,39 @@ export function RestaurantShell({
     }
   }, [isLoginPage]);
 
+  useEffect(() => {
+    if (isLoginPage || !selectedOutlet) return;
+    const channel = supabase
+      .channel("restaurant-new-orders-" + selectedOutlet.id)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "orders", filter: `outlet_id=eq.${selectedOutlet.id}` },
+        (payload) => {
+          const order = payload.new as Order;
+          void playNewOrderSound();
+          toast.success(
+            `New order #${order.order_number}${order.total ? ` • ₹${Number(order.total).toFixed(2)}` : ""}`,
+            { duration: 8000, icon: "🔔" }
+          );
+        }
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [isLoginPage, selectedOutlet, playNewOrderSound, supabase]);
+
+  useEffect(() => () => {
+    void audioContextRef.current?.close();
+  }, []);
+
   function handleOutletChange(outlet: Outlet) {
     setSelectedOutlet(outlet);
     localStorage.setItem("pnut_selected_outlet", outlet.id);
     setOutletSelectorOpen(false);
-    // Reload page data with new outlet context
     router.refresh();
   }
 
-  // Login page renders without the shell
   if (isLoginPage) {
     return <>{children}</>;
   }
@@ -292,6 +360,21 @@ export function RestaurantShell({
             </div>
 
             <div className="flex items-center gap-3">
+              {/* Order sound toggle */}
+              <button
+                type="button"
+                onClick={toggleOrderSound}
+                className="p-2 rounded-lg hover:bg-brand-gray-100 transition-colors"
+                aria-label={orderSoundEnabled ? "Mute order sound" : "Enable order sound"}
+                title={orderSoundEnabled ? "Order sound on" : "Order sound off"}
+              >
+                {orderSoundEnabled ? (
+                  <Volume2 className="w-5 h-5 text-brand-green" />
+                ) : (
+                  <VolumeX className="w-5 h-5 text-brand-gray-400" />
+                )}
+              </button>
+
               {/* Notifications bell */}
               <Link
                 href="/restaurant/orders"
