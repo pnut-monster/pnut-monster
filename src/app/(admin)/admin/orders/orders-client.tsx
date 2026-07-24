@@ -94,7 +94,7 @@ export function AdminOrdersClient() {
         .from("orders")
         .select("*, profiles!orders_user_id_fkey(full_name, phone)");
       if (outletFilter) query = query.eq("outlet_id", outletFilter);
-      const { data, error } = await query.order("created_at", { ascending: false });
+      const { data, error } = await query.order("created_at", { ascending: false }).limit(100);
 
       if (error) throw error;
 

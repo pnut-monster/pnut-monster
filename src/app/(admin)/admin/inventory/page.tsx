@@ -175,19 +175,19 @@ export default function AdminInventoryPage() {
   const fetchItems = useCallback(async () => {
     if (!selectedOutlet) return;
     setItemsLoading(true);
-    const { data, error } = await supabase
-      .from("inventory_items" as never)
-      .select("*")
-      .eq("outlet_id" as never, selectedOutlet as never)
-      .order("category" as never)
-      .order("name" as never);
-    if (error) {
+    try {
+      const res = await fetch(`/api/admin/inventory?outlet_id=${selectedOutlet}`);
+      const json = await res.json();
+      if (!res.ok) {
+        toast.error(json.error || "Failed to load inventory");
+      } else {
+        setItems((json.items as InventoryItem[]) ?? []);
+      }
+    } catch {
       toast.error("Failed to load inventory");
-    } else {
-      setItems((data as InventoryItem[] | null) ?? []);
     }
     setItemsLoading(false);
-  }, [supabase, selectedOutlet]);
+  }, [selectedOutlet]);
 
   const fetchRecipes = useCallback(async () => {
     if (!selectedOutlet) return;
@@ -317,13 +317,19 @@ export default function AdminInventoryPage() {
       is_active: true,
     };
 
-    if (editingItem) {
-      const { error } = await supabase
-        .from("inventory_items" as never)
-        .update(payload as never)
-        .eq("id" as never, editingItem.id as never);
-      if (error) {
-        const msg = error.message || "Save failed";
+    try {
+      const res = await fetch("/api/admin/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          editingItem
+            ? { action: "update", item_id: editingItem.id, payload }
+            : { action: "insert", payload }
+        ),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        const msg = json.error || "Save failed";
         if (msg.includes("idx_inventory_items_outlet_name")) {
           toast.error("An item with this name already exists in this outlet");
         } else {
@@ -332,22 +338,11 @@ export default function AdminInventoryPage() {
         setSaving(false);
         return;
       }
-      toast.success("Item updated");
-    } else {
-      const { error } = await supabase
-        .from("inventory_items" as never)
-        .insert(payload as never);
-      if (error) {
-        const msg = error.message || "Save failed";
-        if (msg.includes("idx_inventory_items_outlet_name")) {
-          toast.error("An item with this name already exists in this outlet");
-        } else {
-          toast.error(msg);
-        }
-        setSaving(false);
-        return;
-      }
-      toast.success("Item added");
+      toast.success(editingItem ? "Item updated" : "Item added");
+    } catch {
+      toast.error("Save failed");
+      setSaving(false);
+      return;
     }
 
     setSaving(false);
@@ -357,12 +352,17 @@ export default function AdminInventoryPage() {
 
   const handleDeleteItem = async (item: InventoryItem) => {
     try {
-      const { error } = await supabase
-        .from("inventory_items" as never)
-        .delete()
-        .eq("id" as never, item.id as never);
-      if (error) throw error;
-      toast.success("Item deleted");
+      const res = await fetch("/api/admin/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete", item_id: item.id }),
+      });
+      if (!res.ok) {
+        const json = await res.json();
+        toast.error(json.error || "Could not delete item");
+      } else {
+        toast.success("Item deleted");
+      }
     } catch {
       toast.error("Could not delete item");
     }
@@ -459,22 +459,26 @@ export default function AdminInventoryPage() {
     const quantityChange = isAddition ? qty : -qty;
 
     try {
-      const { error: updateError } = await supabase
-        .from("inventory_items" as never)
-        .update({ quantity: newQuantity } as never)
-        .eq("id" as never, item.id as never);
-      if (updateError) throw updateError;
-
-      const { error: logError } = await supabase
-        .from("inventory_logs" as never)
-        .insert({
-          inventory_item_id: item.id,
-          change_type: stockChangeType,
-          quantity_change: quantityChange,
-          quantity_after: newQuantity,
-          notes: stockNotes || null,
-        } as never);
-      if (logError) throw logError;
+      const res = await fetch("/api/admin/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "stock_update",
+          item_id: item.id,
+          payload: { quantity: newQuantity },
+          log_payload: {
+            inventory_item_id: item.id,
+            change_type: stockChangeType,
+            quantity_change: quantityChange,
+            quantity_after: newQuantity,
+            notes: stockNotes || null,
+          },
+        }),
+      });
+      if (!res.ok) {
+        const json = await res.json();
+        throw new Error(json.error || "Stock update failed");
+      }
 
       toast.success(`Stock ${isAddition ? "added" : "deducted"} successfully`);
       sendLowStockEmail(item, newQuantity);
@@ -482,8 +486,8 @@ export default function AdminInventoryPage() {
       setStockQuantity("");
       setStockNotes("");
       fetchItems();
-    } catch {
-      toast.error("Stock update failed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Stock update failed");
     }
     setStockSaving(false);
   };
@@ -516,21 +520,21 @@ export default function AdminInventoryPage() {
         setDeductMenuItem("");
         setDeductQuantity("1");
         // Re-fetch and check for low stock items after deduction
-        const { data: updatedItems } = await supabase
-          .from("inventory_items" as never)
-          .select("*")
-          .eq("outlet_id" as never, selectedOutlet as never);
-        if (updatedItems) {
-          const updated = updatedItems as InventoryItem[];
-          updated.forEach((ui) => {
-            if (ui.quantity <= ui.min_stock_level && ui.min_stock_level > 0) {
-              const prev = items.find((old) => old.id === ui.id);
-              if (prev && prev.quantity > prev.min_stock_level) {
-                sendLowStockEmail(ui, ui.quantity);
+        try {
+          const res = await fetch(`/api/admin/inventory?outlet_id=${selectedOutlet}`);
+          const json = await res.json();
+          if (res.ok && json.items) {
+            const updated = json.items as InventoryItem[];
+            updated.forEach((ui) => {
+              if (ui.quantity <= ui.min_stock_level && ui.min_stock_level > 0) {
+                const prev = items.find((old) => old.id === ui.id);
+                if (prev && prev.quantity > prev.min_stock_level) {
+                  sendLowStockEmail(ui, ui.quantity);
+                }
               }
-            }
-          });
-        }
+            });
+          }
+        } catch { /* non-blocking */ }
         fetchItems();
       }
     } catch {

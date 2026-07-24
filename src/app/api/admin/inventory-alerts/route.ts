@@ -1,10 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTemplateEmail } from "@/lib/email/service";
 import { isEmailInfrastructureConfigured } from "@/lib/email/config";
+import { consumeRateLimit, requestIp } from "@/lib/security/rate-limit";
+
+async function requireAdmin(request: NextRequest) {
+  void request;
+  const supabase = await createClient("sb-admin-auth-token");
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  const role = (profile as { role?: string } | null)?.role;
+  if (!role || !["admin", "super_admin"].includes(role)) return null;
+  return user;
+}
 
 export async function POST(request: NextRequest) {
   try {
+    const user = await requireAdmin(request);
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const ip = requestIp(request);
+    const rateLimitResult = await consumeRateLimit("inventory-alerts", ip, 10, 60);
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
     const { inventory_item_id, item_name, quantity, min_stock_level, unit, outlet_name, outlet_id } = body as {
       inventory_item_id: string;
@@ -69,8 +104,13 @@ export async function POST(request: NextRequest) {
 }
 
 // GET: Fetch unresolved low-stock alerts
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const user = await requireAdmin(request);
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const admin = createAdminClient();
     const { data, error } = await admin
       .from("inventory_alerts" as never)

@@ -18,6 +18,9 @@
     "lint": "eslint",
     "test:audit": "node scripts/audit-regression.mjs",
     "test:db-audit": "node scripts/db/audit-regression.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "email:templates:validate": "node scripts/email/validate-templates.mjs",
     "email:templates:test-delivery": "tsx scripts/email/test-all-templates.ts",
     "email:templates:upload": "npm run email:templates:validate && node scripts/email/upload-templates.mjs"
@@ -48,17 +51,22 @@
   "devDependencies": {
     "@opennextjs/cloudflare": "^1.20.1",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^20",
     "@types/react": "18",
     "@types/react-dom": "18",
+    "@vitejs/plugin-react": "^6.0.4",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "jsdom": "^29.1.1",
     "pg": "^8.22.0",
     "serwist": "^9.5.6",
     "supabase": "^2.109.1",
     "tailwindcss": "^4",
     "tsx": "^4.23.1",
     "typescript": "^5",
+    "vitest": "^4.1.10",
     "wrangler": "^4.112.0"
   },
   "overrides": {

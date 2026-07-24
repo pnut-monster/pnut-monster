@@ -78,7 +78,8 @@ export default function OrderHistoryPage() {
           .from("orders")
           .select("*, order_items(id), outlets(name)")
           .eq("user_id", user.id)
-          .order("created_at", { ascending: false });
+          .order("created_at", { ascending: false })
+          .limit(50);
 
         if (cancelled) return;
 
