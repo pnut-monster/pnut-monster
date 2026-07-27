@@ -1,4 +1,3 @@
-import { withSentryConfig } from "@sentry/nextjs";
 import withSerwistInit from "@serwist/next";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -89,17 +88,4 @@ const nextConfig = {
   },
 };
 
-export default withSentryConfig(withSerwist(nextConfig), {
-  org: process.env.SENTRY_ORG,
-  project: process.env.SENTRY_PROJECT,
-  silent: !process.env.CI,
-  widenClientFileUpload: true,
-  disableLogger: true,
-  automaticVercelMonitors: false,
-  bundleSizeOptimizations: {
-    excludeDebugStatements: true,
-    excludeReplayIframe: true,
-    excludeReplayShadowDom: true,
-    excludeReplayWorker: true,
-  },
-});
+export default withSerwist(nextConfig);

@@ -1,8 +1,4 @@
-import * as Sentry from "@sentry/nextjs";
-
-Sentry.init({
-  dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
-  enabled: process.env.NODE_ENV === "production",
-  tracesSampleRate: 0.1,
-  environment: process.env.NODE_ENV,
-});
+// Edge Sentry disabled to stay within Cloudflare Workers free tier size limit.
+// Errors are captured via Cloudflare observability (wrangler.jsonc: observability.enabled).
+// Client-side error tracking remains active via sentry.client.config.ts.
+export {};
