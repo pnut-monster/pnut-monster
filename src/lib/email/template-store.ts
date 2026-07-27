@@ -1,4 +1,4 @@
-import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { AwsClient } from "aws4fetch";
 import { emailConfig } from "./config";
 import type { EmailTemplateName } from "./registry";
 import { getTemplateDefinition } from "./registry";
@@ -6,11 +6,24 @@ import { getTemplateDefinition } from "./registry";
 type CacheEntry = { body: string; etag?: string; loadedAt: number; expiresAt: number };
 const cache = new Map<string, CacheEntry>();
 
-const s3 = new S3Client({ region: emailConfig.aws.templateRegion });
+function getS3Client() {
+  return new AwsClient({
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
+    region: emailConfig.aws.templateRegion,
+    service: "s3",
+  });
+}
 
 function objectKey(name: EmailTemplateName) {
   const filename = getTemplateDefinition(name).key;
   return emailConfig.aws.templatePrefix ? `${emailConfig.aws.templatePrefix}/${filename}` : filename;
+}
+
+function s3Url(key: string) {
+  const bucket = emailConfig.aws.templateBucket;
+  const region = emailConfig.aws.templateRegion;
+  return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
 }
 
 function enforceCacheLimit() {
@@ -31,15 +44,16 @@ export async function getEmailTemplate(name: EmailTemplateName): Promise<string>
   }
 
   try {
-    const result = await s3.send(
-      new GetObjectCommand({ Bucket: emailConfig.aws.templateBucket, Key: key })
-    );
-    const body = await result.Body?.transformToString("utf-8");
+    const client = getS3Client();
+    const res = await client.fetch(s3Url(key), { method: "GET" });
+    if (!res.ok) throw new Error(`S3 GET failed (${res.status})`);
+
+    const body = await res.text();
     if (!body) throw new Error(`S3 email template is empty: ${key}`);
 
     cache.set(key, {
       body,
-      etag: result.ETag,
+      etag: res.headers.get("etag") || undefined,
       loadedAt: Date.now(),
       expiresAt: Date.now() + emailConfig.cache.ttlMs,
     });
@@ -74,4 +88,3 @@ export function getEmailTemplateCacheStats() {
     })),
   };
 }
-

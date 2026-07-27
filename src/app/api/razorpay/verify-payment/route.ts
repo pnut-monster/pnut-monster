@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import Razorpay from "razorpay";
 import { createClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTemplateEmail } from "@/lib/email";
@@ -11,13 +10,7 @@ import {
 import { consumeRateLimit, requestIp } from "@/lib/security/rate-limit";
 import { z } from "zod";
 import { createApiLogger } from "@/lib/logger/api";
-
-function createRazorpayClient() {
-  const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
-  if (!keyId || !keySecret) throw new Error("Razorpay credentials are not configured");
-  return new Razorpay({ key_id: keyId, key_secret: keySecret });
-}
+import { razorpay } from "@/lib/razorpay";
 
 function timingSafeEqualHex(left: string, right: string) {
   const leftBuffer = Buffer.from(left, "hex");
@@ -117,7 +110,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const razorpay = createRazorpayClient();
     const [payment, order] = await Promise.all([
       razorpay.payments.fetch(razorpay_payment_id),
       razorpay.orders.fetch(razorpay_order_id),

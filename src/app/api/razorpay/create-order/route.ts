@@ -1,18 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import Razorpay from "razorpay";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { consumeRateLimit, requestIp } from "@/lib/security/rate-limit";
 import type { Json } from "@/lib/supabase/types";
 import { z } from "zod";
 import { createApiLogger } from "@/lib/logger/api";
-
-function createRazorpayClient() {
-  const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
-  if (!keyId || !keySecret) throw new Error("Razorpay credentials are not configured");
-  return new Razorpay({ key_id: keyId, key_secret: keySecret });
-}
+import { razorpay } from "@/lib/razorpay";
 
 function isDevelopmentOrigin(origin: URL): boolean {
   if (process.env.NODE_ENV !== "development") return false;
@@ -151,7 +144,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const order = await createRazorpayClient().orders.create({
+    const order = await razorpay.orders.create({
       amount: quote.amount_paise,
       currency: quote.currency,
       receipt: receipt || `order_${Date.now()}`,

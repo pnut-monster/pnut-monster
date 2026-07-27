@@ -1,19 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import Razorpay from "razorpay";
 import { createClient } from "@supabase/supabase-js";
 import { sendTemplateEmail } from "@/lib/email";
 import { walletTopupEmailData } from "@/lib/email/templates";
 import { consumeRateLimit, requestIp } from "@/lib/security/rate-limit";
 import { createApiLogger } from "@/lib/logger/api";
 import { z } from "zod";
-
-function createRazorpayClient() {
-  const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
-  if (!keyId || !keySecret) throw new Error("Razorpay credentials are not configured");
-  return new Razorpay({ key_id: keyId, key_secret: keySecret });
-}
+import { razorpay } from "@/lib/razorpay";
 
 function timingSafeEqualHex(left: string, right: string) {
   const leftBuffer = Buffer.from(left, "hex");
@@ -130,7 +123,7 @@ export async function POST(req: NextRequest) {
 
     // Create order
     if (data.action === "create-order") {
-      const order = await createRazorpayClient().orders.create({
+      const order = await razorpay.orders.create({
         amount: Math.round(data.amount * 100),
         currency: "INR",
         receipt: `wallet_${Date.now()}`,
@@ -156,7 +149,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Payment verification failed" }, { status: 400 });
       }
 
-      const razorpay = createRazorpayClient();
       const [payment, order] = await Promise.all([
         razorpay.payments.fetch(razorpay_payment_id),
         razorpay.orders.fetch(razorpay_order_id),
