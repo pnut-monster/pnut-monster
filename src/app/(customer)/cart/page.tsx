@@ -256,6 +256,61 @@ export default function CartPage() {
     setCouponError(null);
   };
 
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  const handleProceedToCheckout = async () => {
+    setCheckoutLoading(true);
+    try {
+      const supabase = createClient();
+      const itemIds = [...new Set(items.map((i) => i.item_id))];
+
+      const { data: groupsData } = await supabase
+        .from("item_customization_groups")
+        .select("id, item_id, name, is_required, min_select, max_select")
+        .in("item_id", itemIds);
+
+      if (groupsData && groupsData.length > 0) {
+        const groupsByItem = new Map<string, typeof groupsData>();
+        for (const g of groupsData) {
+          const existing = groupsByItem.get(g.item_id) ?? [];
+          existing.push(g);
+          groupsByItem.set(g.item_id, existing);
+        }
+
+        const errors: string[] = [];
+        for (const cartItem of items) {
+          const requiredGroups = groupsByItem.get(cartItem.item_id) ?? [];
+          for (const group of requiredGroups) {
+            if (!group.is_required) continue;
+            const cartGroup = cartItem.customizations.find(
+              (c) => c.group_id === group.id
+            );
+            const selectedCount = cartGroup?.options.length ?? 0;
+            if (selectedCount < group.min_select) {
+              errors.push(
+                `"${cartItem.name}" is missing required ${group.name}. Please remove it and re-add from the menu.`
+              );
+            }
+          }
+        }
+
+        if (errors.length > 0) {
+          for (const err of errors) {
+            toast.error(err, { duration: 5000 });
+          }
+          setCheckoutLoading(false);
+          return;
+        }
+      }
+
+      router.push("/checkout");
+    } catch {
+      router.push("/checkout");
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
+
   if (items.length === 0) {
     return (
       <div className="min-h-screen bg-[#FAFBFC]">
@@ -576,7 +631,9 @@ export default function CartPage() {
         <Button
           size="lg"
           className="w-full"
-          onClick={() => router.push("/checkout")}
+          loading={checkoutLoading}
+          disabled={checkoutLoading}
+          onClick={handleProceedToCheckout}
         >
           Proceed to Checkout &middot; {formatCurrency(total)}
         </Button>

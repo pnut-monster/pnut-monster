@@ -153,7 +153,7 @@ export default function RestaurantOrdersPage() {
             table: "orders",
           } as never,
           (payload: { eventType: string; new: Order }) => {
-            if (outletId && payload.new.outlet_id !== outletId) return;
+            if (outletId && payload.new?.outlet_id && payload.new.outlet_id !== outletId) return;
             if (payload.eventType === "INSERT") {
               playNotificationSound();
               if (autoAcceptRef.current && payload.new.status === "pending") {
@@ -172,14 +172,8 @@ export default function RestaurantOrdersPage() {
               } else {
                 loadOrders();
               }
-            } else if (payload.eventType === "UPDATE") {
-              setOrders((prev) =>
-                prev.map((o) =>
-                  o.id === payload.new.id
-                    ? { ...o, ...payload.new }
-                    : o
-                )
-              );
+            } else {
+              loadOrders();
             }
           }
         )

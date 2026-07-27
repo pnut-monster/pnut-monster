@@ -103,6 +103,29 @@ export function AdminShell({
     }
   }, [orderSoundEnabled]);
 
+  const playNewOrderSoundRef = useRef(playNewOrderSound);
+  playNewOrderSoundRef.current = playNewOrderSound;
+
+  // Warm up AudioContext on first user interaction so sound plays on first notification
+  useEffect(() => {
+    const warmUp = () => {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioContext();
+      }
+      if (audioContextRef.current.state === "suspended") {
+        void audioContextRef.current.resume();
+      }
+      window.removeEventListener("click", warmUp);
+      window.removeEventListener("keydown", warmUp);
+    };
+    window.addEventListener("click", warmUp, { once: true });
+    window.addEventListener("keydown", warmUp, { once: true });
+    return () => {
+      window.removeEventListener("click", warmUp);
+      window.removeEventListener("keydown", warmUp);
+    };
+  }, []);
+
   // Authentication pages render without the admin navigation shell.
   const isAuthPage =
     pathname === "/admin/login" || pathname.startsWith("/admin/mfa/");
@@ -158,18 +181,22 @@ export function AdminShell({
         { event: "INSERT", schema: "public", table: "orders" },
         (payload) => {
           const order = payload.new as Order;
-          void playNewOrderSound();
+          void playNewOrderSoundRef.current();
           toast.success(
             `New order #${order.order_number}${order.total ? ` • ₹${Number(order.total).toFixed(2)}` : ""}`,
             { duration: 8000, icon: "🔔" }
           );
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "CHANNEL_ERROR") {
+          console.error("[Admin Realtime] Channel error for orders");
+        }
+      });
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [adminUser.role, isAuthPage, playNewOrderSound, supabase]);
+  }, [adminUser.role, isAuthPage, supabase]);
 
   useEffect(() => () => {
     void audioContextRef.current?.close();

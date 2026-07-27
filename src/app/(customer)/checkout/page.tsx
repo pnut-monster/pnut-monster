@@ -442,6 +442,48 @@ export default function CheckoutPage() {
     rzp.open();
   };
 
+  const validateCartCustomizations = async (): Promise<string[]> => {
+    const supabase = createClient();
+    const itemIds = [...new Set(items.map((i) => i.item_id))];
+
+    const { data: groupsData } = await supabase
+      .from("item_customization_groups")
+      .select("id, item_id, name, is_required, min_select, max_select")
+      .in("item_id", itemIds);
+
+    if (!groupsData || groupsData.length === 0) return [];
+
+    const errors: string[] = [];
+    const groupsByItem = new Map<string, typeof groupsData>();
+    for (const g of groupsData) {
+      const existing = groupsByItem.get(g.item_id) ?? [];
+      existing.push(g);
+      groupsByItem.set(g.item_id, existing);
+    }
+
+    for (const cartItem of items) {
+      const requiredGroups = groupsByItem.get(cartItem.item_id) ?? [];
+      for (const group of requiredGroups) {
+        const cartGroup = cartItem.customizations.find(
+          (c) => c.group_id === group.id
+        );
+        const selectedCount = cartGroup?.options.length ?? 0;
+
+        if (group.is_required && selectedCount < group.min_select) {
+          errors.push(
+            `"${cartItem.name}" requires at least ${group.min_select} selection${group.min_select > 1 ? "s" : ""} for ${group.name}. Please remove it and re-add with correct options.`
+          );
+        } else if (selectedCount > group.max_select) {
+          errors.push(
+            `"${cartItem.name}" has too many selections for ${group.name} (max ${group.max_select}). Please remove it and re-add with correct options.`
+          );
+        }
+      }
+    }
+
+    return errors;
+  };
+
   const handlePlaceOrder = async () => {
     if (!outlet_id) {
       toast.error("Please select an outlet first");
@@ -456,6 +498,15 @@ export default function CheckoutPage() {
     setPlacing(true);
 
     try {
+      const customizationErrors = await validateCartCustomizations();
+      if (customizationErrors.length > 0) {
+        for (const err of customizationErrors) {
+          toast.error(err, { duration: 5000 });
+        }
+        setPlacing(false);
+        return;
+      }
+
       const { resolvedOutletId, outletExists } = await resolveOutlet();
 
       if (!outletExists) {
@@ -475,7 +526,22 @@ export default function CheckoutPage() {
       }
     } catch (err) {
       console.error("Place order error:", err);
-      toast.error(err instanceof Error ? err.message : "Failed to place order. Please try again.");
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("Required customization is incomplete")) {
+        const groupName = msg.split(": ")[1] || "a required option";
+        toast.error(
+          `Missing required customization: ${groupName}. Please remove the item and re-add it from the menu.`,
+          { duration: 5000 }
+        );
+      } else if (msg.includes("Too many customization options")) {
+        const groupName = msg.split(": ")[1] || "a group";
+        toast.error(
+          `Too many options selected for ${groupName}. Please remove the item and re-add it.`,
+          { duration: 5000 }
+        );
+      } else {
+        toast.error(msg || "Failed to place order. Please try again.");
+      }
       setPlacing(false);
     }
   };
