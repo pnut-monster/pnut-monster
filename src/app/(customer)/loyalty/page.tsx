@@ -443,7 +443,6 @@ export default function LoyaltyPage() {
       }
 
       toast.success("Check-in successful! Points earned.");
-      setLoading(true);
       await fetchData();
     } catch {
       toast.error("Something went wrong. Please try again.");
@@ -487,7 +486,6 @@ export default function LoyaltyPage() {
             ? `+${result.points_awarded} referral points claimed!`
             : "Referral points claimed!"
         );
-        setLoading(true);
         await fetchData();
         return;
       }
@@ -514,7 +512,6 @@ export default function LoyaltyPage() {
           ? `+${result.points_awarded} points claimed!`
           : "Points claimed successfully!"
       );
-      setLoading(true);
       await fetchData();
     } catch {
       toast.error("Something went wrong. Please try again.");
@@ -543,7 +540,6 @@ export default function LoyaltyPage() {
       toast.success("Thank you for your feedback!");
       setRatingOrderId(null);
       setRatingValue(0);
-      setLoading(true);
       await fetchData();
     } catch {
       toast.error("Something went wrong. Please try again.");
