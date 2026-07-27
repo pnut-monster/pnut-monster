@@ -172,9 +172,9 @@ export default function LoyaltyPage() {
 
       // Fetch points percentage settings
       const { data: pctData } = await supabase
-        .from("app_settings" as never)
+        .from("app_settings")
         .select("key, value")
-        .in("key" as never, ["points_pct_wallet_topup", "points_pct_order_placed"]);
+        .in("key", ["points_pct_wallet_topup", "points_pct_order_placed"]);
       const pctRows = (pctData ?? []) as { key: string; value: string }[];
       for (const row of pctRows) {
         if (row.key === "points_pct_wallet_topup") setPctWalletTopup(parseFloat(row.value) || 2);
@@ -252,11 +252,11 @@ export default function LoyaltyPage() {
         .order("created_at", { ascending: false })
         .limit(50);
       const { data: refundLedgerData } = await supabase
-        .from("loyalty_ledger" as never)
+        .from("loyalty_ledger")
         .select("id, user_id, points, description, order_id, created_at")
-        .eq("user_id" as never, user.id)
-        .eq("source" as never, "order_refund")
-        .order("created_at" as never, { ascending: false })
+        .eq("user_id", user.id)
+        .eq("source", "order_refund")
+        .order("created_at", { ascending: false })
         .limit(50);
       const logs = (logData ?? []) as PointsLog[];
       const refundLogs = ((refundLedgerData ?? []) as LoyaltyLedgerEntry[]).map((entry) => ({
@@ -312,7 +312,7 @@ export default function LoyaltyPage() {
       setTotalOrderCount(pickedUpOrders.length);
 
       // Fetch membership status from backend
-      const { data: membershipData } = await supabase.rpc("get_membership_status" as never, { p_user_id: user.id } as never);
+      const { data: membershipData } = await supabase.rpc("get_membership_status", { p_user_id: user.id });
       const mStatus = membershipData as { enabled: boolean; current_tier?: string; cycle_order_count?: number; tier1_threshold?: number; tier2_threshold?: number; bonus_pct?: number; cycle_end?: string } | null;
       if (mStatus) {
         setMembershipEnabled(mStatus.enabled);
@@ -328,9 +328,9 @@ export default function LoyaltyPage() {
 
       // Fetch user's ratings
       const { data: ratingsData } = await supabase
-        .from("order_ratings" as never)
+        .from("order_ratings")
         .select("order_id")
-        .eq("user_id" as never, user.id);
+        .eq("user_id", user.id);
       const ratedOrderIds = new Set(
         ((ratingsData ?? []) as { order_id: string }[]).map((r) => r.order_id)
       );
@@ -364,7 +364,7 @@ export default function LoyaltyPage() {
       const referralAction = allActions.find((a) => a.slug === "referral");
       if (referralAction) {
         const { data: referralClaimableData } = await supabase.rpc(
-          "get_claimable_referral_rewards" as never
+          "get_claimable_referral_rewards"
         );
         const referralClaimableCount = Number(referralClaimableData ?? 0);
         if (referralClaimableCount > 0) {
@@ -431,11 +431,11 @@ export default function LoyaltyPage() {
     if (!userId) return;
     setCheckInLoading(true);
     try {
-      const { error } = await supabase.rpc("award_loyalty_points" as never, {
+      const { error } = await supabase.rpc("award_loyalty_points", {
         p_user_id: userId,
         p_action_slug: "daily_checkin",
         p_reference_id: "checkin_" + Date.now(),
-      } as never);
+      });
 
       if (error) {
         toast.error(error.message);
@@ -468,7 +468,7 @@ export default function LoyaltyPage() {
       }
 
       if (actionSlug === "referral") {
-        const { data: rpcData, error } = await supabase.rpc("claim_referral_reward" as never);
+        const { data: rpcData, error } = await supabase.rpc("claim_referral_reward");
 
         if (error) {
           toast.error(error.message);
@@ -490,11 +490,11 @@ export default function LoyaltyPage() {
         return;
       }
 
-      const { data, error } = await supabase.rpc("award_loyalty_points" as never, {
+      const { data, error } = await supabase.rpc("award_loyalty_points", {
         p_user_id: userId,
         p_action_slug: actionSlug,
         p_reference_id: refId,
-      } as never);
+      });
 
       if (error) {
         toast.error(error.message);
@@ -525,12 +525,12 @@ export default function LoyaltyPage() {
     setRatingSubmitting(true);
     try {
       const { error } = await supabase
-        .from("order_ratings" as never)
+        .from("order_ratings")
         .insert({
           order_id: orderId,
           user_id: userId,
           rating: ratingValue,
-        } as never);
+        });
 
       if (error) {
         toast.error(error.message);

@@ -29,8 +29,8 @@ export default function ReferralClaimPage() {
     try {
       const supabase = createClient();
       const { data, error } = await supabase.rpc(
-        "apply_referral_code" as never,
-        { p_referral_code: trimmed } as never
+        "apply_referral_code",
+        { p_referral_code: trimmed }
       );
       const result = data as { success?: boolean; message?: string } | null;
 
