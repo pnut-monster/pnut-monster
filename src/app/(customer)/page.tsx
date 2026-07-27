@@ -499,16 +499,11 @@ export default function CustomerHomePage() {
                         <span className="text-lg font-heading font-bold text-brand-black">
                           {formatCurrency(item.base_price)}
                         </span>
-                        <button
-                          type="button"
-                          className="w-9 h-9 rounded-xl bg-brand-yellow hover:bg-brand-yellow-dark flex items-center justify-center shadow-sm hover:shadow-md transition-all active:scale-95"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                          }}
+                        <span
+                          className="w-9 h-9 rounded-xl bg-brand-yellow group-hover:bg-brand-yellow-dark flex items-center justify-center shadow-sm group-hover:shadow-md transition-all"
                         >
                           <Plus className="w-5 h-5 text-brand-black" />
-                        </button>
+                        </span>
                       </div>
                     </div>
                   </div>
