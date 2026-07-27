@@ -40,8 +40,7 @@ export async function POST(request: NextRequest) {
     const admin = createAdminClient();
 
     if (action === "insert" && payload) {
-      // @ts-expect-error - inventory_items not in generated types yet
-      const { data, error } = await admin
+      const { data, error } = await (admin as any)
         .from("inventory_items")
         .insert(payload)
         .select()
@@ -53,8 +52,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "update" && item_id && payload) {
-      // @ts-expect-error - inventory_items not in generated types yet
-      const { data, error } = await admin
+      const { data, error } = await (admin as any)
         .from("inventory_items")
         .update(payload)
         .eq("id", item_id)
@@ -67,16 +65,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "stock_update" && item_id && payload && log_payload) {
-      // @ts-expect-error - inventory_items not in generated types yet
-      const { error: updateError } = await admin
+      const { error: updateError } = await (admin as any)
         .from("inventory_items")
         .update(payload)
         .eq("id", item_id);
       if (updateError) {
         return NextResponse.json({ error: updateError.message, code: updateError.code }, { status: 400 });
       }
-      // @ts-expect-error - inventory_logs not in generated types yet
-      const { error: logError } = await admin
+      const { error: logError } = await (admin as any)
         .from("inventory_logs")
         .insert({ ...log_payload, performed_by: user.id });
       if (logError) {
@@ -86,8 +82,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "delete" && item_id) {
-      // @ts-expect-error - inventory_items not in generated types yet
-      const { error } = await admin
+      const { error } = await (admin as any)
         .from("inventory_items")
         .delete()
         .eq("id", item_id);
@@ -115,8 +110,7 @@ export async function GET(request: NextRequest) {
   }
 
   const admin = createAdminClient();
-  // @ts-expect-error - inventory_items not in generated types yet
-  const { data, error } = await admin
+  const { data, error } = await (admin as any)
     .from("inventory_items")
     .select("*")
     .eq("outlet_id", outletId)
