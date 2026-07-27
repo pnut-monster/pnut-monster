@@ -61,7 +61,7 @@ function assertSameOrigin(request: NextRequest) {
 }
 
 const requestSchema = z.object({
-  orderData: z.record(z.unknown()),
+  orderData: z.record(z.string(), z.unknown()),
   orderItems: z.array(z.unknown()).nonempty(),
   currency: z.string().optional().default("INR"),
   walletAmount: z.number().min(0).optional().default(0),
