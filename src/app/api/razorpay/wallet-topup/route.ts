@@ -5,6 +5,8 @@ import { createClient } from "@supabase/supabase-js";
 import { sendTemplateEmail } from "@/lib/email";
 import { walletTopupEmailData } from "@/lib/email/templates";
 import { consumeRateLimit, requestIp } from "@/lib/security/rate-limit";
+import { createApiLogger } from "@/lib/logger/api";
+import { z } from "zod";
 
 function createRazorpayClient() {
   const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
@@ -68,17 +70,41 @@ function assertSameOrigin(request: NextRequest) {
   return null;
 }
 
+const createOrderSchema = z.object({
+  action: z.literal("create-order"),
+  accessToken: z.string(),
+  amount: z.number().min(1).max(100000),
+});
+
+const verifyPaymentSchema = z.object({
+  action: z.literal("verify"),
+  accessToken: z.string(),
+  razorpay_order_id: z.string(),
+  razorpay_payment_id: z.string(),
+  razorpay_signature: z.string(),
+});
+
+const requestSchema = z.discriminatedUnion("action", [
+  createOrderSchema,
+  verifyPaymentSchema,
+]);
+
 export async function POST(req: NextRequest) {
+  const { log, requestId } = createApiLogger(req);
+
   try {
     const originError = assertSameOrigin(req);
     if (originError) return originError;
 
-    const { action, amount, razorpay_order_id, razorpay_payment_id, razorpay_signature, accessToken } =
-      await req.json();
+    const body = await req.json();
+    const validation = requestSchema.safeParse(body);
 
-    if (!accessToken) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!validation.success) {
+      return NextResponse.json({ error: "Missing payment details" }, { status: 400 });
     }
+
+    const data = validation.data;
+    const { accessToken } = data;
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -103,14 +129,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Create order
-    if (action === "create-order") {
-      const numericAmount = Number(amount);
-      if (!Number.isFinite(numericAmount) || numericAmount < 1 || numericAmount > 100_000) {
-        return NextResponse.json({ error: "Minimum top-up is ₹1" }, { status: 400 });
-      }
-
+    if (data.action === "create-order") {
       const order = await createRazorpayClient().orders.create({
-        amount: Math.round(numericAmount * 100),
+        amount: Math.round(data.amount * 100),
         currency: "INR",
         receipt: `wallet_${Date.now()}`,
       });
@@ -123,10 +144,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify payment and credit wallet
-    if (action === "verify") {
-      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-        return NextResponse.json({ error: "Missing payment details" }, { status: 400 });
-      }
+    if (data.action === "verify") {
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = data;
 
       const expectedSignature = crypto
         .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
@@ -166,7 +185,12 @@ export async function POST(req: NextRequest) {
       } as never);
 
       if (error) {
-        console.error("Wallet topup error:", error);
+        log.error("Wallet topup failed", {
+          error: error.message,
+          userId: user.id,
+          amount: topupAmount,
+          paymentId: razorpay_payment_id,
+        });
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
@@ -189,7 +213,9 @@ export async function POST(req: NextRequest) {
           to: user.email,
           data: templateData,
           tags: { source: "wallet_topup", payment: razorpay_payment_id },
-        }).catch((emailError) => console.error("Wallet top-up email failed", emailError));
+        }).catch((emailError) => log.warn("Wallet top-up email failed", {
+          error: emailError instanceof Error ? emailError.message : String(emailError),
+        }));
       }
 
       return NextResponse.json(data);
@@ -197,7 +223,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (error) {
-    console.error("Wallet topup error:", error);
+    log.error("Wallet topup request failed", {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

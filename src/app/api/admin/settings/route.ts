@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { consumeRateLimit, requestIp } from "@/lib/security/rate-limit";
 
 async function requireAdmin(request: NextRequest) {
   void request;
@@ -9,6 +10,10 @@ async function requireAdmin(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return null;
+
+  const { data: assurance, error: assuranceError } =
+    await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (assuranceError || assurance.currentLevel !== "aal2") return null;
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -26,6 +31,15 @@ export async function PATCH(request: NextRequest) {
     const user = await requireAdmin(request);
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const ip = requestIp(request);
+    const rl = await consumeRateLimit("admin_settings", `${user.id}:${ip}`, 20, 60);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests" },
+        { status: 429, headers: { "Retry-After": String(rl.retry_after) } }
+      );
     }
 
     const body = await request.json();

@@ -1,13 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { z } from "zod";
+
+const requestSchema = z.object({
+  userId: z.string().uuid(),
+});
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = await req.json();
+    const body = await req.json();
+    const validation = requestSchema.safeParse(body);
 
-    if (!userId) {
+    if (!validation.success) {
       return NextResponse.json({ error: "Missing userId" }, { status: 400 });
     }
+
+    const { userId } = validation.data;
 
     const supabase = await createClient("sb-admin-auth-token");
     const {

@@ -96,4 +96,10 @@ export default withSentryConfig(withSerwist(nextConfig), {
   widenClientFileUpload: true,
   disableLogger: true,
   automaticVercelMonitors: false,
+  bundleSizeOptimizations: {
+    excludeDebugStatements: true,
+    excludeReplayIframe: true,
+    excludeReplayShadowDom: true,
+    excludeReplayWorker: true,
+  },
 });

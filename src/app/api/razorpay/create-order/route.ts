@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { consumeRateLimit, requestIp } from "@/lib/security/rate-limit";
 import type { Json } from "@/lib/supabase/types";
+import { z } from "zod";
+import { createApiLogger } from "@/lib/logger/api";
 
 function createRazorpayClient() {
   const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
@@ -58,20 +60,41 @@ function assertSameOrigin(request: NextRequest) {
   return null;
 }
 
+const requestSchema = z.object({
+  orderData: z.record(z.unknown()),
+  orderItems: z.array(z.unknown()).nonempty(),
+  currency: z.string().optional().default("INR"),
+  walletAmount: z.number().min(0).optional().default(0),
+  loyaltyPoints: z.number().min(0).optional().default(0),
+  nthOrderDiscount: z.number().min(0).optional().default(0),
+  couponCode: z.string().optional(),
+  couponDiscount: z.number().min(0).optional().default(0),
+  receipt: z.string().optional(),
+});
+
 export async function POST(req: NextRequest) {
+  const { log, requestId } = createApiLogger(req);
+
   try {
     const originError = assertSameOrigin(req);
     if (originError) return originError;
 
+    const body = await req.json();
+    const validation = requestSchema.safeParse(body);
+
+    if (!validation.success) {
+      return NextResponse.json({ error: "Missing order details" }, { status: 400 });
+    }
+
     const {
-      currency = "INR",
+      currency,
       receipt,
       orderData,
       orderItems,
-      walletAmount = 0,
-      loyaltyPoints = 0,
-      nthOrderDiscount = 0,
-    } = await req.json();
+      walletAmount,
+      loyaltyPoints,
+      nthOrderDiscount,
+    } = validation.data;
 
     if (currency !== "INR") {
       return NextResponse.json({ error: "Unsupported currency" }, { status: 400 });
@@ -98,9 +121,6 @@ export async function POST(req: NextRequest) {
         { status: 429, headers: { "Retry-After": String(rateLimit.retry_after) } }
       );
     }
-    if (!orderData || !Array.isArray(orderItems) || orderItems.length === 0) {
-      return NextResponse.json({ error: "Missing order details" }, { status: 400 });
-    }
 
     const admin = createAdminClient();
     const { data: quoteData, error: quoteError } = await admin.rpc(
@@ -121,7 +141,10 @@ export async function POST(req: NextRequest) {
       expires_at: string;
     } | null;
     if (quoteError || !quote) {
-      console.error("Checkout quote failed", quoteError);
+      log.error("Checkout quote failed", {
+        error: quoteError?.message || "No quote returned",
+        userId: user.id,
+      });
       return NextResponse.json(
         { error: quoteError?.message || "Could not calculate checkout total" },
         { status: 400 }
@@ -152,7 +175,11 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (attemptError || !attempt) {
-      console.error("Payment attempt persistence failed", attemptError);
+      log.error("Payment attempt persistence failed", {
+        error: attemptError?.message || "No attempt returned",
+        orderId: order.id,
+        userId: user.id,
+      });
       return NextResponse.json({ error: "Could not persist payment attempt" }, { status: 500 });
     }
 
@@ -164,7 +191,10 @@ export async function POST(req: NextRequest) {
       expiresAt: quote.expires_at,
     });
   } catch (error) {
-    console.error("Razorpay create order error:", error);
+    log.error("Razorpay create order failed", {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json(
       { error: "Failed to create payment order" },
       { status: 500 }

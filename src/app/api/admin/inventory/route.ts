@@ -40,9 +40,10 @@ export async function POST(request: NextRequest) {
     const admin = createAdminClient();
 
     if (action === "insert" && payload) {
+      // @ts-expect-error - inventory_items not in generated types yet
       const { data, error } = await admin
-        .from("inventory_items" as never)
-        .insert(payload as never)
+        .from("inventory_items")
+        .insert(payload)
         .select()
         .single();
       if (error) {
@@ -52,9 +53,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "update" && item_id && payload) {
+      // @ts-expect-error - inventory_items not in generated types yet
       const { data, error } = await admin
-        .from("inventory_items" as never)
-        .update(payload as never)
+        .from("inventory_items")
+        .update(payload)
         .eq("id", item_id)
         .select()
         .single();
@@ -65,16 +67,18 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "stock_update" && item_id && payload && log_payload) {
+      // @ts-expect-error - inventory_items not in generated types yet
       const { error: updateError } = await admin
-        .from("inventory_items" as never)
-        .update(payload as never)
+        .from("inventory_items")
+        .update(payload)
         .eq("id", item_id);
       if (updateError) {
         return NextResponse.json({ error: updateError.message, code: updateError.code }, { status: 400 });
       }
+      // @ts-expect-error - inventory_logs not in generated types yet
       const { error: logError } = await admin
-        .from("inventory_logs" as never)
-        .insert({ ...log_payload, performed_by: user.id } as never);
+        .from("inventory_logs")
+        .insert({ ...log_payload, performed_by: user.id });
       if (logError) {
         return NextResponse.json({ error: logError.message, code: logError.code }, { status: 400 });
       }
@@ -82,8 +86,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "delete" && item_id) {
+      // @ts-expect-error - inventory_items not in generated types yet
       const { error } = await admin
-        .from("inventory_items" as never)
+        .from("inventory_items")
         .delete()
         .eq("id", item_id);
       if (error) {
@@ -110,8 +115,9 @@ export async function GET(request: NextRequest) {
   }
 
   const admin = createAdminClient();
+  // @ts-expect-error - inventory_items not in generated types yet
   const { data, error } = await admin
-    .from("inventory_items" as never)
+    .from("inventory_items")
     .select("*")
     .eq("outlet_id", outletId)
     .order("category")

@@ -16,6 +16,7 @@
 # next.js
 /.next/
 /.next-codex-validation/
+/.next-validate/
 .next-*.log
 /out/
 /public/sw.js

@@ -1,23 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requestIp } from "@/lib/security/admin-passkeys";
-
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT = 5;
-const RATE_WINDOW_MS = 60_000;
-
-function checkRateLimit(key: string) {
-  const now = Date.now();
-  const entry = rateLimitMap.get(key);
-  if (!entry || entry.resetAt <= now) {
-    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_WINDOW_MS });
-    return false;
-  }
-  if (entry.count >= RATE_LIMIT) return true;
-  entry.count += 1;
-  return false;
-}
+import { consumeRateLimit, requestIp } from "@/lib/security/rate-limit";
 
 async function getAuthenticatedAdmin() {
   const supabase = await createClient("sb-admin-auth-token");
@@ -35,6 +19,13 @@ async function getAuthenticatedAdmin() {
   if (!profile || !["admin", "super_admin"].includes((profile as { role: string }).role)) {
     return { user: null, supabase };
   }
+
+  const { data: assurance, error: assuranceError } =
+    await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (assuranceError || assurance.currentLevel !== "aal2") {
+    return { user: null, supabase };
+  }
+
   return { user, supabase };
 }
 
@@ -48,10 +39,11 @@ export async function POST(request: NextRequest) {
     }
 
     const ip = requestIp(request);
-    if (checkRateLimit(`change-2fa:${user.id}`)) {
+    const rl = await consumeRateLimit("change_2fa", `${user.id}:${ip}`, 5, 60);
+    if (!rl.allowed) {
       return NextResponse.json(
         { error: "Too many attempts. Please try again later." },
-        { status: 429 }
+        { status: 429, headers: { "Retry-After": String(rl.retry_after) } }
       );
     }
 

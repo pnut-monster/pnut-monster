@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { uploadToS3, deleteFromS3, isS3Configured } from "@/lib/s3/client";
 import { createClient } from "@/lib/supabase/server";
 import { consumeRateLimit } from "@/lib/security/rate-limit";
+import { createApiLogger } from "@/lib/logger/api";
 
 const ALLOWED_UPLOAD_ROLES = new Set(["admin", "super_admin"]);
 const ALLOWED_FOLDERS = new Set([
@@ -80,6 +81,8 @@ function detectImage(bytes: Uint8Array): DetectedImage | null {
 }
 
 export async function POST(request: NextRequest) {
+  const { log, requestId } = createApiLogger(request);
+
   try {
     const originError = assertSameOrigin(request);
     if (originError) return originError;
@@ -116,12 +119,17 @@ export async function POST(request: NextRequest) {
     const dataUrl = `data:${detected.contentType};base64,${Buffer.from(bytes).toString("base64")}`;
     return NextResponse.json({ url: dataUrl, key, size: bytes.length, method: "local" });
   } catch (error) {
-    console.error("Upload error:", error);
+    log.error("Upload failed", {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json({ error: "Failed to upload image" }, { status: 500 });
   }
 }
 
 export async function DELETE(request: NextRequest) {
+  const { log, requestId } = createApiLogger(request);
+
   try {
     const originError = assertSameOrigin(request);
     if (originError) return originError;
@@ -140,7 +148,10 @@ export async function DELETE(request: NextRequest) {
     if (isS3Configured()) await deleteFromS3(key);
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Delete error:", error);
+    log.error("Delete failed", {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json({ error: "Failed to delete image" }, { status: 500 });
   }
 }

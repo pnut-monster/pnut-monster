@@ -10,7 +10,7 @@
     "predev": "node scripts/clean-dev-artifacts.mjs",
     "dev": "next dev --hostname 0.0.0.0 --port 3000",
     "build": "next build",
-    "build:cloudflare": "opennextjs-cloudflare build",
+    "build:cloudflare": "opennextjs-cloudflare build --minify",
     "preview:cloudflare": "npm run build:cloudflare && wrangler dev",
     "deploy:cloudflare": "npm run build:cloudflare && opennextjs-cloudflare deploy",
     "cf:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
@@ -26,11 +26,8 @@
     "email:templates:upload": "npm run email:templates:validate && node scripts/email/upload-templates.mjs"
   },
   "dependencies": {
-    "@aws-sdk/client-iam": "^3.1090.0",
-    "@aws-sdk/client-route-53": "^3.1090.0",
     "@aws-sdk/client-s3": "^3.1002.0",
     "@aws-sdk/client-ses": "^3.1083.0",
-    "@aws-sdk/client-sts": "^3.1090.0",
     "@aws-sdk/s3-request-presigner": "^3.1002.0",
     "@sentry/nextjs": "^10.68.0",
     "@serwist/next": "^9.5.6",

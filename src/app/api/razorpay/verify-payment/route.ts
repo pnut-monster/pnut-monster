@@ -9,6 +9,8 @@ import {
   paymentSuccessfulEmailData,
 } from "@/lib/email/templates";
 import { consumeRateLimit, requestIp } from "@/lib/security/rate-limit";
+import { z } from "zod";
+import { createApiLogger } from "@/lib/logger/api";
 
 function createRazorpayClient() {
   const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
@@ -72,31 +74,36 @@ function assertSameOrigin(request: NextRequest) {
   return null;
 }
 
+const requestSchema = z.object({
+  razorpay_order_id: z.string(),
+  razorpay_payment_id: z.string(),
+  razorpay_signature: z.string(),
+  accessToken: z.string(),
+});
+
 export async function POST(req: NextRequest) {
+  const { log, requestId } = createApiLogger(req);
+
   try {
     const originError = assertSameOrigin(req);
     if (originError) return originError;
 
-    const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature,
-      accessToken,
-    } = await req.json();
+    const body = await req.json();
+    const validation = requestSchema.safeParse(body);
 
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+    if (!validation.success) {
       return NextResponse.json(
         { error: "Missing payment details" },
         { status: 400 }
       );
     }
 
-    if (!accessToken) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
-    }
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      accessToken,
+    } = validation.data;
 
     const expectedSignature = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
@@ -192,7 +199,10 @@ export async function POST(req: NextRequest) {
     const result = data as { order_id: string } | null;
 
     if (error) {
-      console.error("Order placement error after payment:", error);
+      log.error("Order placement error after payment", {
+        error: error.message || String(error),
+        attemptId: savedAttempt.id,
+      });
       return NextResponse.json(
         { error: error.message || "Failed to place order after payment" },
         { status: 500 }
@@ -241,7 +251,9 @@ export async function POST(req: NextRequest) {
         to: user.email,
         data: orderEmailData,
         tags: { source: "checkout", order: result.order_id },
-      }).catch((emailError) => console.error("Order confirmation email failed", emailError));
+      }).catch((emailError) => log.warn("Order confirmation email failed", {
+          error: emailError instanceof Error ? emailError.message : String(emailError),
+        }));
 
       // Payment receipt
       const receiptData = paymentSuccessfulEmailData(customerName, {
@@ -256,12 +268,17 @@ export async function POST(req: NextRequest) {
         to: user.email,
         data: receiptData,
         tags: { source: "checkout", payment: razorpay_payment_id },
-      }).catch((emailError) => console.error("Payment receipt email failed", emailError));
+      }).catch((emailError) => log.warn("Payment receipt email failed", {
+          error: emailError instanceof Error ? emailError.message : String(emailError),
+        }));
     }
 
     return NextResponse.json({ order_id: result.order_id });
   } catch (error) {
-    console.error("Payment verification error:", error);
+    log.error("Payment verification failed", {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json(
       { error: "Payment verification failed" },
       { status: 500 }
