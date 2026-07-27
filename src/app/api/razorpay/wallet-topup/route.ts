@@ -177,21 +177,21 @@ export async function POST(req: NextRequest) {
       // Use user's token to call the RPC (so auth.uid() is set)
       const topupAmount = Number(payment.amount) / 100;
 
-      const { data, error } = await supabase.rpc("self_topup_wallet" as never, {
+      const { data: rpcData, error: rpcError } = await supabase.rpc("self_topup_wallet" as never, {
         p_user_id: user.id,
         p_amount: topupAmount,
         p_razorpay_payment_id: razorpay_payment_id,
         p_razorpay_order_id: razorpay_order_id,
       } as never);
 
-      if (error) {
+      if (rpcError) {
         log.error("Wallet topup failed", {
-          error: error.message,
+          error: rpcError.message,
           userId: user.id,
           amount: topupAmount,
           paymentId: razorpay_payment_id,
         });
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: rpcError.message }, { status: 500 });
       }
 
       // Send wallet top-up email (fire-and-forget)
@@ -202,7 +202,7 @@ export async function POST(req: NextRequest) {
           .eq("id", user.id)
           .single();
         const name = (profile as { full_name: string | null } | null)?.full_name || "Customer";
-        const result = data as { total_balance?: number } | null;
+        const result = rpcData as { total_balance?: number } | null;
         const templateData = walletTopupEmailData(name, {
           amount: topupAmount,
           paymentId: razorpay_payment_id,
@@ -218,7 +218,7 @@ export async function POST(req: NextRequest) {
         }));
       }
 
-      return NextResponse.json(data);
+      return NextResponse.json(rpcData);
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
