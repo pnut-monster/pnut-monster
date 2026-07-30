@@ -18,6 +18,7 @@ import { formatCurrency } from "@/lib/utils/helpers";
 import type { Outlet, Wallet as WalletType } from "@/lib/supabase/types";
 import type { Json } from "@/lib/supabase/types";
 import toast from "react-hot-toast";
+import { BatchCheckoutSection } from "@/components/customer/batch/batch-checkout-section";
 
 type PaymentMethod = "online" | "wallet" | "split";
 type RewardOption = "coupon" | "loyalty";
@@ -86,6 +87,17 @@ export default function CheckoutPage() {
   const [loyaltyUserBalance, setLoyaltyUserBalance] = useState(0);
   const [loyaltyReason, setLoyaltyReason] = useState("");
   const [rewardOption, setRewardOption] = useState<RewardOption>("coupon");
+
+  // Batch context
+  const [batchContext, setBatchContext] = useState<{
+    windowId: string;
+    reservationId: string;
+    expiresAt: string;
+    deliveryFee: number;
+    blockId: string;
+    subLocationId: string | null;
+    subLocationText: string;
+  } | null>(null);
 
   // Nth order discount
   const [nthOrderEligible, setNthOrderEligible] = useState(false);
@@ -418,8 +430,21 @@ export default function CheckoutPage() {
           }
 
           const { order_id } = await verifyRes.json();
+
+          // If batch context, confirm the slot after payment
+          if (batchContext) {
+            const supabaseBatch = createClient();
+            await supabaseBatch.rpc("confirm_batch_slot" as never, {
+              p_reservation_id: batchContext.reservationId,
+              p_order_id: order_id,
+              p_block_id: batchContext.blockId,
+              p_sub_location_id: batchContext.subLocationId,
+              p_sub_location_text: batchContext.subLocationText || null,
+            } as never);
+          }
+
           clearCart();
-          toast.success("Payment successful! Order placed.");
+          toast.success(batchContext ? "Batch order placed!" : "Payment successful! Order placed.");
           router.push(`/orders/${order_id}/confirmation`);
         } catch {
           toast.error("Payment verification failed. Please contact support.");
@@ -523,8 +548,26 @@ export default function CheckoutPage() {
 
       if (amountDue <= 0) {
         const orderId = await placeOrderDirect(resolvedOutletId);
+
+        // If batch context, confirm the slot
+        if (batchContext) {
+          const supabase = createClient();
+          const { error: batchError } = await supabase.rpc("confirm_batch_slot" as never, {
+            p_reservation_id: batchContext.reservationId,
+            p_order_id: orderId,
+            p_block_id: batchContext.blockId,
+            p_sub_location_id: batchContext.subLocationId,
+            p_sub_location_text: batchContext.subLocationText || null,
+          } as never);
+          if (batchError) {
+            toast.error(batchError.message);
+            setPlacing(false);
+            return;
+          }
+        }
+
         clearCart();
-        toast.success("Order placed successfully!");
+        toast.success(batchContext ? "Batch order placed!" : "Order placed successfully!");
         router.push(`/orders/${orderId}/confirmation`);
       } else {
         await initiateRazorpayPayment(resolvedOutletId);
@@ -626,6 +669,14 @@ export default function CheckoutPage() {
             </div>
           </div>
         </Card>
+
+        {/* Batch Delivery Section */}
+        {outlet_id && (
+          <BatchCheckoutSection
+            outletId={outlet_id}
+            onBatchContextChange={setBatchContext}
+          />
+        )}
 
         {/* Wallet Section */}
         <Card>

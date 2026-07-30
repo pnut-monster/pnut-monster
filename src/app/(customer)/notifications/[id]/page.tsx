@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ChevronLeft, Bell, ShoppingBag, Wallet, Star, Gift } from "lucide-react";
+import { ChevronLeft, Bell, ShoppingBag, Wallet, Star, Gift, Boxes } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Spinner } from "@/components/ui/spinner";
 import type { Notification } from "@/lib/supabase/types";
@@ -31,6 +31,12 @@ function NotificationIcon({ type }: { type: Notification["type"] }) {
       return (
         <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
           <Gift className="w-6 h-6 text-purple-600" />
+        </div>
+      );
+    case "batch":
+      return (
+        <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
+          <Boxes className="w-6 h-6 text-orange-600" />
         </div>
       );
     default:

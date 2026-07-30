@@ -17,6 +17,7 @@ import {
   Gift,
   ShoppingBag,
 } from "lucide-react";
+import { MonsterCounter } from "@/components/customer/batch/monster-counter";
 
 import { createClient } from "@/lib/supabase/client";
 import { useOutletStore } from "@/lib/stores/outlet-store";
@@ -227,6 +228,9 @@ export default function CustomerHomePage() {
             </Link>
           </div>
         </section>
+
+        {/* Batch Monster Counter */}
+        <MonsterCounter />
 
         {/* Main Content Grid */}
         <div className="grid lg:grid-cols-3 gap-6 mb-8">

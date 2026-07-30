@@ -25,6 +25,7 @@ const PROTECTED_CUSTOMER_PATHS = [
   "/referral",
   "/referral-claim",
   "/checkout",
+  "/rep",
 ];
 
 function createSupabaseMiddlewareClient(

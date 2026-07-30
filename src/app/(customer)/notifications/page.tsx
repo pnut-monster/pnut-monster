@@ -11,6 +11,7 @@ import {
   Star,
   Gift,
   CheckCheck,
+  Boxes,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/helpers";
@@ -74,6 +75,12 @@ function NotificationIcon({ type }: { type: Notification["type"] }) {
       return (
         <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
           <Gift className="w-5 h-5 text-purple-600" />
+        </div>
+      );
+    case "batch":
+      return (
+        <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
+          <Boxes className="w-5 h-5 text-orange-600" />
         </div>
       );
     case "general":
