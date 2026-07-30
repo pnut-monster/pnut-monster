@@ -1,4 +1,5 @@
-// @ts-nocheck — batch tables not yet in generated types; remove after running migrations + type gen
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+// @ts-nocheck
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 

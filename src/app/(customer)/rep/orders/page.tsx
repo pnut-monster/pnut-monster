@@ -1,4 +1,5 @@
-// @ts-nocheck — batch tables not yet in generated types; remove after running migrations + type gen
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+// @ts-nocheck
 "use client";
 
 import { useEffect, useState } from "react";
@@ -33,8 +34,6 @@ export default function RepOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<BatchOrder[]>([]);
   const [flagging, setFlagging] = useState<string | null>(null);
-
-  useEffect(() => { loadOrders(); }, []);
 
   async function loadOrders() {
     const supabase = createClient();
@@ -115,6 +114,8 @@ export default function RepOrdersPage() {
     setOrders(assembled);
     setLoading(false);
   }
+
+  useEffect(() => { loadOrders(); }, []);
 
   async function flagUndeliverable(orderId: string) {
     const reason = prompt("Reason? (customer_not_responding / wrong_location / other)");

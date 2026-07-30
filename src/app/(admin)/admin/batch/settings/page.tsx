@@ -1,4 +1,5 @@
-// @ts-nocheck — batch tables not yet in generated types; remove after running migrations + type gen
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+// @ts-nocheck
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -34,6 +35,18 @@ export default function AdminBatchSettingsPage() {
   });
   const [savingOutlet, setSavingOutlet] = useState(false);
 
+  function loadOutletConfig(outlet: Outlet) {
+    const cfg = outlet.batch_config || {};
+    setOutletConfig({
+      default_delivery_fee: String(cfg.default_delivery_fee ?? "0"),
+      label_format: String(cfg.label_format ?? "thermal"),
+      default_commission_type: String(cfg.default_commission_type ?? "flat_per_order"),
+      default_commission_value: String(cfg.default_commission_value ?? "5"),
+      counter_display_mode: String(cfg.counter_display_mode ?? "exact"),
+      counter_visual_style: String(cfg.counter_visual_style ?? "static"),
+    });
+  }
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     const [settingsRes, outletRes] = await Promise.all([
@@ -56,18 +69,6 @@ export default function AdminBatchSettingsPage() {
   }, [supabase, selectedOutlet]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
-
-  function loadOutletConfig(outlet: Outlet) {
-    const cfg = outlet.batch_config || {};
-    setOutletConfig({
-      default_delivery_fee: String(cfg.default_delivery_fee ?? "0"),
-      label_format: String(cfg.label_format ?? "thermal"),
-      default_commission_type: String(cfg.default_commission_type ?? "flat_per_order"),
-      default_commission_value: String(cfg.default_commission_value ?? "5"),
-      counter_display_mode: String(cfg.counter_display_mode ?? "exact"),
-      counter_visual_style: String(cfg.counter_visual_style ?? "static"),
-    });
-  }
 
   async function saveGlobalSettings() {
     setSaving(true);

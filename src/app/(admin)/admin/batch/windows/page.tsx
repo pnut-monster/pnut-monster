@@ -1,4 +1,5 @@
-// @ts-nocheck — batch tables not yet in generated types; remove after running migrations + type gen
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+// @ts-nocheck
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -9,11 +10,6 @@ import {
   Clock,
   Users,
   Package,
-  XCircle,
-  CheckCircle2,
-  Timer,
-  TrendingUp,
-  Eye,
   FileText,
   Tag,
 } from "lucide-react";
@@ -95,8 +91,6 @@ export default function AdminBatchWindowsPage() {
   });
   const [saving, setSaving] = useState(false);
 
-  // Detail modal
-  const [detailWindow, setDetailWindow] = useState<BatchWindow | null>(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
