@@ -151,7 +151,14 @@ export default function NotificationsPage() {
     };
   }, [fetchNotifications, supabase, userId]);
 
-  const markAsRead = async (notif: Notification) => {
+  const LONG_BODY_THRESHOLD = 100;
+
+  const handleNotificationClick = async (notif: Notification) => {
+    if (notif.body && notif.body.length > LONG_BODY_THRESHOLD) {
+      router.push(`/notifications/${notif.id}`);
+      return;
+    }
+
     if (notif.is_read) return;
 
     // Optimistically update UI
@@ -280,7 +287,7 @@ export default function NotificationsPage() {
                   transition={{ duration: 0.2, delay: index * 0.04 }}
                 >
                   <button
-                    onClick={() => markAsRead(notif)}
+                    onClick={() => handleNotificationClick(notif)}
                     className={cn(
                       "w-full text-left bg-white rounded-xl p-4 flex items-start gap-3 shadow-sm border transition-colors",
                       notif.is_read
@@ -335,7 +342,7 @@ export default function NotificationsPage() {
                   }}
                 >
                   <button
-                    onClick={() => markAsRead(notif)}
+                    onClick={() => handleNotificationClick(notif)}
                     className={cn(
                       "w-full text-left bg-white rounded-xl p-4 flex items-start gap-3 shadow-sm border transition-colors",
                       notif.is_read

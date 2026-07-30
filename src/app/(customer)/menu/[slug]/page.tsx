@@ -114,12 +114,13 @@ export default function ItemDetailPage() {
                     .from("outlet_unavailable_options" as never)
                     .select("option_id" as never)
                     .eq("outlet_id" as never, selectedOutlet.id as never)
-                : Promise.resolve({ data: [] }),
+                : Promise.resolve({ data: null, error: null }),
             ]);
 
             const allOptions = (optionsResult.data ?? []) as CustomizationOption[];
+            const unavailableData = (unavailableResult as { data: { option_id: string }[] | null }).data;
             const unavailableIds = new Set(
-              ((unavailableResult.data ?? []) as { option_id: string }[]).map((r) => r.option_id)
+              (unavailableData ?? []).map((r) => r.option_id)
             );
             fetchedOptions = allOptions.filter((o) => !unavailableIds.has(o.id));
           }

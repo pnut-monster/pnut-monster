@@ -116,9 +116,14 @@ export default function CheckoutPage() {
       if (!user) return;
       try {
         const supabase = createClient();
-        const { data } = await supabase.rpc("check_nth_order_discount" as never, {
+        const { data, error } = await supabase.rpc("check_nth_order_discount" as never, {
           p_user_id: user.id,
         } as never);
+        if (error) {
+          console.error("[Checkout] nth order discount check failed:", error.message);
+          setNthOrderEligible(false);
+          return;
+        }
         const result = data as { eligible: boolean; discount_pct: number; stack_with_loyalty: boolean } | null;
         if (result) {
           setNthOrderEligible(result.eligible);

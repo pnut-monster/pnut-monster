@@ -1059,4 +1059,771 @@ These map to the existing `orders` status field but with batch-specific labels i
 - Multi-hub support (outlet serves multiple campuses)
 - Batch history and reporting for admin
 - Export tools (CSV of batch data, commission reports)
-- Push notifications for reps (assignment ready, escalation)
+- Push notifications for reps (assignment ready, escalation) PNUT MONSTER Batch/Pool Order System
+
+Addendum Document
+
+Operational Improvements & Production Enhancements (Version 2)
+
+⸻
+
+Purpose
+
+This document extends the original Batch/Pool Order System Design by introducing operational improvements, production controls, scalability enhancements, failure handling, analytics, and optimization layers.
+
+Nothing in this document replaces the original specification.
+
+Instead, these additions make the platform production-ready for operating hundreds of batches across multiple universities and campuses.
+
+⸻
+
+1. Production Run Layer
+
+Why It Exists
+
+A batch window is responsible for collecting orders.
+
+A Production Run is responsible for executing them.
+
+Once a window closes, the system should create an immutable Production Run.
+
+This prevents modifications from changing kitchen instructions after cooking has begun.
+
+⸻
+
+Lifecycle
+
+Batch Window
+↓
+Window Closed
+↓
+Production Run Created
+↓
+Kitchen Preparation
+↓
+Packaging
+↓
+Representative Pickup
+↓
+Delivery
+↓
+Completed
+
+⸻
+
+Production Run Object
+
+Field	Description
+Run ID	Unique production identifier
+Batch Window	Source window
+Outlet	Linked outlet
+Created At	Time generated
+Locked Orders	Number of frozen orders
+Locked Revenue	Revenue snapshot
+Prep Status	Pending / Preparing / Packed
+Packaging Status	Pending / Complete
+Delivery Status	Pending / Active / Completed
+
+⸻
+
+Benefits
+
+* Immutable production snapshot
+* Stable PDFs
+* Consistent analytics
+* Easier audits
+* No accidental kitchen changes
+
+⸻
+
+2. Operational Status Expansion
+
+Customer-facing statuses remain simple.
+
+Operations require more detail.
+
+⸻
+
+Internal Workflow
+
+Scheduled
+↓
+Open
+↓
+Locked
+↓
+Production Started
+↓
+Preparation Complete
+↓
+Packaging Started
+↓
+Packaging Complete
+↓
+Awaiting Representative Pickup
+↓
+Picked Up
+↓
+Partially Delivered
+↓
+Completed
+↓
+Archived
+
+⸻
+
+Customer Status Mapping
+
+Internal	Customer
+Open	Batch Pending
+Locked	Batch Pending
+Production Started	Preparing
+Packaging Complete	Preparing
+Picked Up	Out for Delivery
+Completed	Delivered
+
+⸻
+
+3. Inventory Validation
+
+Before the kitchen starts preparing food, the system performs a complete ingredient validation.
+
+⸻
+
+Process
+
+Orders Locked
+↓
+Calculate Required Components
+↓
+Compare With Inventory
+↓
+Generate Shortage Report
+↓
+Manager Decision
+Proceed
+or
+Restock
+or
+Cancel Batch
+
+⸻
+
+Example
+
+Required
+Paneer
+4.2kg
+Available
+3.5kg
+Shortage
+700g
+
+⸻
+
+Benefits
+
+* Prevents failed batches
+* Better inventory planning
+* Reduced food waste
+
+⸻
+
+4. Kitchen Production Stages
+
+The prep sheet should follow the actual kitchen workflow.
+
+⸻
+
+Stage 1
+
+Base Preparation
+
+* Heat breads
+* Toast buns
+* Warm tortillas
+
+⸻
+
+Stage 2
+
+Protein Preparation
+
+* Chicken
+* Paneer
+* Egg
+* Mushroom
+
+⸻
+
+Stage 3
+
+Sauces
+
+* Chipotle
+* Mayo
+* Peanut
+* Mint
+
+⸻
+
+Stage 4
+
+Vegetables
+
+* Onion
+* Lettuce
+* Jalapeños
+
+⸻
+
+Stage 5
+
+Assembly
+
+* Assemble wraps
+* Assemble bowls
+* Prepare drinks
+
+⸻
+
+Stage 6
+
+Packaging
+
+* Box items
+* Attach labels
+* Sort by representative
+
+⸻
+
+5. Inventory Forecast
+
+Every completed batch contributes to demand forecasting.
+
+Example
+
+Monday Lunch
+Average
+72 Wraps
+18 Coffees
+12 Lemonades
+
+The system predicts inventory requirements for future batches.
+
+⸻
+
+6. Representative Bundle Management
+
+Current design tracks parcel delivery.
+
+This enhancement tracks parcel ownership.
+
+⸻
+
+Bundle Lifecycle
+
+Kitchen
+↓
+Packed
+↓
+Bundle Created
+↓
+Representative Pickup
+↓
+Representative In Transit
+↓
+Delivered
+
+⸻
+
+Bundle QR
+
+Every representative receives one bundle QR.
+
+Scanning confirms:
+
+* Bundle collected
+* Time collected
+* Representative identity
+* Number of parcels
+
+⸻
+
+Parcel QR
+
+Still used for final customer delivery.
+
+⸻
+
+7. Delivery Cluster Optimization
+
+Instead of balancing only order counts, deliveries should be optimized geographically.
+
+⸻
+
+Algorithm
+
+Orders
+↓
+Group by Block
+↓
+Group by Floor
+↓
+Group by Nearby Rooms
+↓
+Estimate Walking Time
+↓
+Assign to Representatives
+
+⸻
+
+Example
+
+Representative A
+
+Room 201
+Room 202
+Room 203
+Room 204
+
+Representative B
+
+Floor 3
+Room 318
+Room 322
+Room 330
+
+This minimizes walking distance.
+
+⸻
+
+8. Estimated Delivery Time Engine
+
+Every customer receives a dynamic ETA.
+
+⸻
+
+Formula
+
+Window Close
++
+Average Kitchen Time
++
+Packing Time
++
+Representative Travel
+=
+Estimated Delivery Time
+
+⸻
+
+Example
+
+Window Closes
+11:30
+Kitchen
+25 mins
+Packing
+12 mins
+Delivery
+15 mins
+ETA
+12:22 PM
+
+⸻
+
+9. Batch Dashboard Enhancements
+
+Outlet dashboard gains operational metrics.
+
+⸻
+
+Live Metrics
+
+Current Orders
+
+Revenue
+
+Average Order Value
+
+Items to Prepare
+
+Preparation Progress
+
+Packaging Progress
+
+Representative Pickup Status
+
+Delivered Orders
+
+Remaining Orders
+
+Completion %
+
+⸻
+
+Visual Indicators
+
+Green
+
+On Schedule
+
+Yellow
+
+Running Late
+
+Red
+
+Critical Delay
+
+⸻
+
+10. Shelf & Packing Zones
+
+Large batches require physical organization.
+
+⸻
+
+Shelf Assignment
+
+Shelf A
+Engineering Block
+Shelf B
+Management Block
+Shelf C
+Library
+Shelf D
+Hostel
+
+Labels display
+
+Shelf B
+
+Representatives immediately know where to collect parcels.
+
+⸻
+
+11. Enhanced Parcel Labels
+
+Additional fields
+
+* Shelf Number
+* Packaging Sequence
+* Bundle Number
+* Production Run ID
+* Estimated Delivery Time
+
+Example
+
+Bundle
+2 / 5
+Shelf
+A
+Run
+#PR-107
+
+⸻
+
+12. Failure Management
+
+The platform should support operational exceptions.
+
+⸻
+
+Representative Absent
+
+Rep Offline
+↓
+Auto Notify Manager
+↓
+Reassign Orders
+↓
+Generate New Bundle
+
+⸻
+
+Kitchen Delay
+
+Prep Running Late
+↓
+ETA Updated
+↓
+Customers Notified
+
+⸻
+
+Customer Unreachable
+
+Representative selects
+
+* Phone unreachable
+* Incorrect location
+* Customer unavailable
+
+Manager receives alert.
+
+⸻
+
+Weather Delay
+
+Manager can mark
+
+Delivery Delayed
+Reason
+Weather
+
+Customers automatically receive ETA updates.
+
+⸻
+
+13. Exception Queue
+
+Managers get a dedicated queue.
+
+Contains
+
+* Undeliverable orders
+* Missing parcels
+* Inventory shortages
+* Failed QR scans
+* Representative reassignment
+* Customer complaints
+
+⸻
+
+14. Security Improvements
+
+Every QR validation should verify
+
+* Representative
+* Assigned order
+* Batch
+* Production Run
+* Timestamp
+* Signature
+* Expiration
+
+Additional metadata
+
+* GPS
+* Device ID
+* Scan time
+
+⸻
+
+15. Batch Analytics
+
+Every batch generates detailed analytics.
+
+⸻
+
+Operational
+
+* Fill Rate
+* Orders
+* Revenue
+* Average Order Value
+* Preparation Time
+* Packaging Time
+* Pickup Delay
+* Delivery Duration
+* Completion Rate
+
+⸻
+
+Kitchen
+
+* Components Used
+* Packaging Used
+* Inventory Shortages
+* Food Waste
+
+⸻
+
+Representative
+
+* Orders Delivered
+* Average Delivery Time
+* Delivery Success Rate
+* Customer Complaints
+* Earnings
+
+⸻
+
+Customer
+
+* Repeat Orders
+* Average Spend
+* Preferred Batch
+* Popular Time Slot
+* Preferred Block
+
+⸻
+
+16. AI Optimization Layer
+
+Future AI models can optimize operations automatically.
+
+⸻
+
+Demand Prediction
+
+Predicts
+
+* Expected orders
+* Expected revenue
+* Inventory requirements
+
+⸻
+
+Kitchen Optimization
+
+Suggests
+
+* Preparation order
+* Ingredient batching
+* Staffing requirements
+
+⸻
+
+Representative Optimization
+
+Suggests
+
+* Number of representatives
+* Delivery routes
+* Cluster improvements
+
+⸻
+
+Batch Timing Optimization
+
+Analyzes historical data to recommend
+
+* Better start times
+* Better end times
+* Better capacity
+
+⸻
+
+17. Multi-Campus Scalability
+
+Instead of university-specific assumptions, the system should use a generic Delivery Hub architecture.
+
+Example
+
+Delivery Hub
+↓
+Institution
+↓
+Office Park
+↓
+Tech Campus
+↓
+Hospital
+↓
+Industrial Area
+
+This allows the same infrastructure to serve universities, corporate campuses, hospitals, and business parks.
+
+⸻
+
+18. Operational Audit Trail
+
+Every important action is logged.
+
+Examples
+
+* Window created
+* Window closed
+* Production Run generated
+* Representative assigned
+* Bundle collected
+* Parcel delivered
+* Refund processed
+* Batch cancelled
+
+Each record contains
+
+* User
+* Timestamp
+* Previous value
+* New value
+* Device
+* IP (where applicable)
+
+⸻
+
+19. Business Intelligence Dashboard
+
+Management dashboards should include:
+
+Revenue
+
+* Revenue by outlet
+* Revenue by hub
+* Revenue by batch
+* Revenue by representative
+
+Operational
+
+* Average batch completion time
+* Average kitchen delay
+* Delivery SLA
+* Batch profitability
+
+Customer
+
+* Retention
+* Repeat purchases
+* Most active blocks
+* Peak ordering windows
+
+Representative
+
+* Top performers
+* Average earnings
+* Settlement reports
+* Delivery quality
+
+⸻
+
+20. Future Automation
+
+The platform can gradually automate operations.
+
+Examples include:
+
+* Automatically create recurring batch windows
+* Auto-close batches when capacity is reached
+* Automatically generate Production Runs
+* Automatically generate kitchen PDFs and parcel labels
+* Automatically assign representatives
+* Automatically notify customers and representatives
+* Automatically predict inventory shortages
+* Automatically recommend staffing levels
+* Automatically archive completed batches
+
+⸻
+
+Summary
+
+These enhancements transform the Batch/Pool Ordering System from a scheduling feature into a comprehensive production and operations platform.
+
+The additions focus on:
+
+* Immutable Production Runs
+* Operational state management
+* Inventory validation
+* Delivery clustering
+* Bundle tracking
+* Shelf management
+* Dynamic ETA calculation
+* Exception handling
+* Advanced analytics
+* AI-assisted optimization
+* Enterprise scalability
+* Operational auditability
+
+Together with the original design, these improvements provide a production-ready architecture capable of supporting high-volume batch operations across multiple campuses and delivery hubs while maintaining operational efficiency, reliability, and scalability.

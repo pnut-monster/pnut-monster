@@ -291,6 +291,67 @@ begin
 end;
 $$ language plpgsql security definer set search_path = public;
 
+-- Also fix get_claimable_referral_rewards to check is_active on loyalty_actions
+create or replace function public.get_claimable_referral_rewards()
+returns int as $$
+declare
+  v_referral_action_id uuid;
+  v_reward_trigger text;
+  v_count int;
+begin
+  if auth.uid() is null then
+    return 0;
+  end if;
+
+  select id
+  into v_referral_action_id
+  from public.loyalty_actions
+  where slug = 'referral'
+    and is_active = true
+  limit 1;
+
+  if v_referral_action_id is null then
+    return 0;
+  end if;
+
+  select coalesce(config->>'reward_trigger', 'signup')
+  into v_reward_trigger
+  from public.campaigns
+  where type = 'referral'
+    and is_active = true
+    and starts_at <= now()
+    and ends_at >= now()
+  order by created_at desc
+  limit 1;
+
+  v_reward_trigger := coalesce(v_reward_trigger, 'signup');
+
+  select count(*)
+  into v_count
+  from public.profiles referred
+  where referred.referred_by = auth.uid()
+    and (
+      v_reward_trigger = 'signup'
+      or exists (
+        select 1
+        from public.orders o
+        where o.user_id = referred.id
+          and o.status = 'picked_up'
+      )
+    )
+    and not exists (
+      select 1
+      from public.loyalty_points_log l
+      where l.user_id = auth.uid()
+        and l.action_id = v_referral_action_id
+        and l.reference_id = 'referral:' || referred.id::text
+    );
+
+  return coalesce(v_count, 0);
+end;
+$$ language plpgsql security definer set search_path = public;
+
+grant execute on function public.get_claimable_referral_rewards() to authenticated;
 grant execute on function public.claim_referee_reward() to authenticated;
 grant execute on function public.claim_referral_reward() to authenticated;
 grant execute on function public.award_referral_rewards(uuid, text) to authenticated;

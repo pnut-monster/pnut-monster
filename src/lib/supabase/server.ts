@@ -10,10 +10,10 @@ function resolveStorageKey(
 ): AuthStorageKey {
   if (storageKey) return storageKey;
 
-  const names = new Set(cookieStore.getAll().map((cookie) => cookie.name));
-  return names.has("sb-admin-auth-token")
-    ? "sb-admin-auth-token"
-    : "sb-customer-auth-token";
+  const hasAdmin = cookieStore
+    .getAll()
+    .some((c) => c.name === "sb-admin-auth-token" || c.name.startsWith("sb-admin-auth-token."));
+  return hasAdmin ? "sb-admin-auth-token" : "sb-customer-auth-token";
 }
 
 export async function createClient(storageKey?: AuthStorageKey) {

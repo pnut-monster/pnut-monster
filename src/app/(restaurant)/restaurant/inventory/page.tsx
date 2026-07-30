@@ -335,7 +335,7 @@ export default function RestaurantInventoryPage() {
       .select("*, inventory_items:inventory_item_id(name, unit, outlet_id), customization_options:customization_option_id(name, item_customization_groups:group_id(name))" as never)
       .eq("inventory_items.outlet_id" as never, selectedOutlet as never);
 
-    if (error) return;
+    if (error || !data) return;
 
     const mapped = ((data as never[]) ?? []).map((r: never) => {
       const row = r as Record<string, unknown>;
@@ -399,13 +399,16 @@ export default function RestaurantInventoryPage() {
   const fetchAlerts = useCallback(async () => {
     if (!selectedOutlet) return;
     setAlertsLoading(true);
-    const { data } = await supabase
+
+    const { data, error: alertsError } = await supabase
       .from("inventory_stock_alerts" as never)
       .select("*" as never)
       .eq("outlet_id" as never, selectedOutlet as never)
       .order("created_at" as never, { ascending: false })
       .limit(50);
-    setAlerts(((data as unknown as StockAlert[]) ?? []));
+    if (!alertsError && data) {
+      setAlerts(data as unknown as StockAlert[]);
+    }
 
     // Fetch blocked menu items
     const { data: blockedMenuData } = await supabase
@@ -422,23 +425,25 @@ export default function RestaurantInventoryPage() {
     setBlockedItems(mapped);
 
     // Fetch blocked customization options
-    const { data: blockedOptData } = await supabase
+    const { data: blockedOptData, error: optError } = await supabase
       .from("outlet_unavailable_options" as never)
       .select("outlet_id, option_id, customization_options:option_id(name, item_customization_groups:group_id(name))" as never)
       .eq("outlet_id" as never, selectedOutlet as never);
 
-    const mappedOpts = ((blockedOptData as never[]) ?? []).map((row: never) => {
-      const r = row as Record<string, unknown>;
-      const opt = r.customization_options as Record<string, unknown> | null;
-      const grp = opt?.item_customization_groups as { name: string } | null;
-      return {
-        outlet_id: r.outlet_id as string,
-        option_id: r.option_id as string,
-        option_name: (opt?.name as string) ?? "Unknown",
-        group_name: grp?.name ?? "Unknown",
-      };
-    });
-    setBlockedOptions(mappedOpts);
+    if (!optError && blockedOptData) {
+      const mappedOpts = ((blockedOptData as never[]) ?? []).map((row: never) => {
+        const r = row as Record<string, unknown>;
+        const opt = r.customization_options as Record<string, unknown> | null;
+        const grp = opt?.item_customization_groups as { name: string } | null;
+        return {
+          outlet_id: r.outlet_id as string,
+          option_id: r.option_id as string,
+          option_name: (opt?.name as string) ?? "Unknown",
+          group_name: grp?.name ?? "Unknown",
+        };
+      });
+      setBlockedOptions(mappedOpts);
+    }
 
     setAlertsLoading(false);
   }, [supabase, selectedOutlet]);
