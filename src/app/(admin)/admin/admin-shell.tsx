@@ -104,7 +104,9 @@ export function AdminShell({
   }, [orderSoundEnabled]);
 
   const playNewOrderSoundRef = useRef(playNewOrderSound);
-  playNewOrderSoundRef.current = playNewOrderSound;
+  useEffect(() => {
+    playNewOrderSoundRef.current = playNewOrderSound;
+  }, [playNewOrderSound]);
 
   // Warm up AudioContext on first user interaction so sound plays on first notification
   useEffect(() => {
