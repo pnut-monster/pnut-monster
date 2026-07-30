@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Input, Modal, Spinner, Tabs, Badge } from "@/components/ui";
 import {
@@ -16,11 +15,11 @@ import {
   ChefHat,
   Search,
   Filter,
+  Bell,
+  CheckCircle2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { cn } from "@/lib/utils/helpers";
-
-type Outlet = { id: string; name: string };
 
 type InventoryItem = {
   id: string;
@@ -117,21 +116,44 @@ const CATEGORIES = [
   "beverages",
 ];
 
+type StockAlert = {
+  id: string;
+  outlet_id: string;
+  inventory_item_id: string;
+  alert_type: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+};
+
+type BlockedItem = {
+  outlet_id: string;
+  item_id: string;
+  item_name: string;
+};
+
+type BlockedOption = {
+  outlet_id: string;
+  option_id: string;
+  option_name: string;
+  group_name: string;
+};
+
 const TABS = [
   { label: "Raw Materials", value: "materials" },
   { label: "Recipes", value: "recipes" },
   { label: "Stock Update", value: "stock" },
   { label: "Activity Log", value: "log" },
+  { label: "Stock Alerts", value: "alerts" },
 ];
 
-export default function AdminInventoryPage() {
+export default function RestaurantInventoryPage() {
   const supabase = createClient();
-  const searchParams = useSearchParams();
-  const outletParam = searchParams.get("outlet");
   const [activeTab, setActiveTab] = useState("materials");
-  const [outlets, setOutlets] = useState<Outlet[]>([]);
-  const [selectedOutlet, setSelectedOutlet] = useState<string>(outletParam ?? "");
+  const [selectedOutlet, setSelectedOutlet] = useState<string>("");
+  const [outletName, setOutletName] = useState<string>("");
   const [loading, setLoading] = useState(true);
+  const [isManager, setIsManager] = useState(false);
 
   // Materials state
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -175,28 +197,67 @@ export default function AdminInventoryPage() {
   const [logs, setLogs] = useState<InventoryLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
 
-  const fetchOutlets = useCallback(async () => {
-    const { data } = await supabase
-      .from("outlets")
-      .select("id, name")
-      .eq("is_active", true)
-      .order("name");
-    if (data) {
-      setOutlets(data as Outlet[]);
-      if (data.length > 0 && !selectedOutlet) {
-        setSelectedOutlet(outletParam && data.some((o) => o.id === outletParam) ? outletParam : data[0].id);
-      }
-    }
-    setLoading(false);
-  }, [supabase, selectedOutlet, outletParam]);
+  // Alerts state
+  const [alerts, setAlerts] = useState<StockAlert[]>([]);
+  const [alertsLoading, setAlertsLoading] = useState(false);
+  const [blockedItems, setBlockedItems] = useState<BlockedItem[]>([]);
+  const [blockedOptions, setBlockedOptions] = useState<BlockedOption[]>([]);
 
-  useEffect(() => { fetchOutlets(); }, [fetchOutlets]);
+  useEffect(() => {
+    async function init() {
+      const outletId = localStorage.getItem("pnut_selected_outlet");
+      if (!outletId) {
+        setLoading(false);
+        return;
+      }
+      setSelectedOutlet(outletId);
+
+      let { data: { user } } = await supabase.auth.getUser();
+      // Fallback: admin users on /restaurant paths only have sb-admin-auth-token
+      if (!user) {
+        const adminClient = createClient("sb-admin-auth-token");
+        const result = await adminClient.auth.getUser();
+        user = result.data.user;
+      }
+      if (!user) { setLoading(false); return; }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      const role = (profile as { role: string } | null)?.role;
+
+      if (role && ["admin", "super_admin"].includes(role)) {
+        setIsManager(true);
+      } else {
+        const { data: assignment } = await supabase
+          .from("outlet_staff" as never)
+          .select("is_manager" as never)
+          .eq("user_id" as never, user.id as never)
+          .eq("outlet_id" as never, outletId as never)
+          .single();
+        setIsManager(!!(assignment as { is_manager: boolean } | null)?.is_manager);
+      }
+
+      const { data: outlet } = await supabase
+        .from("outlets")
+        .select("name")
+        .eq("id", outletId)
+        .single();
+      if (outlet) setOutletName((outlet as { name: string }).name);
+
+      setLoading(false);
+    }
+    init();
+  }, [supabase]);
 
   const fetchItems = useCallback(async () => {
     if (!selectedOutlet) return;
     setItemsLoading(true);
     try {
-      const res = await fetch(`/api/admin/inventory?outlet_id=${selectedOutlet}`);
+      const res = await fetch(`/api/restaurant/inventory?outlet_id=${selectedOutlet}`);
       const json = await res.json();
       if (!res.ok) {
         toast.error(json.error || "Failed to load inventory");
@@ -335,17 +396,101 @@ export default function AdminInventoryPage() {
     setLogsLoading(false);
   }, [supabase, selectedOutlet]);
 
-  useEffect(() => {
+  const fetchAlerts = useCallback(async () => {
     if (!selectedOutlet) return;
-    fetchItems();
-    fetchMenuItems();
-  }, [selectedOutlet, fetchItems, fetchMenuItems]);
+    setAlertsLoading(true);
+    const { data } = await supabase
+      .from("inventory_stock_alerts" as never)
+      .select("*" as never)
+      .eq("outlet_id" as never, selectedOutlet as never)
+      .order("created_at" as never, { ascending: false })
+      .limit(50);
+    setAlerts(((data as unknown as StockAlert[]) ?? []));
+
+    // Fetch blocked menu items
+    const { data: blockedMenuData } = await supabase
+      .from("outlet_menu_items")
+      .select("outlet_id, item_id, menu_items!inner(name)" as never)
+      .eq("outlet_id", selectedOutlet)
+      .eq("is_available", false);
+
+    const mapped = ((blockedMenuData as never[]) ?? []).map((row: never) => {
+      const r = row as Record<string, unknown>;
+      const mi = r.menu_items as { name: string } | null;
+      return { outlet_id: r.outlet_id as string, item_id: r.item_id as string, item_name: mi?.name ?? "Unknown" };
+    });
+    setBlockedItems(mapped);
+
+    // Fetch blocked customization options
+    const { data: blockedOptData } = await supabase
+      .from("outlet_unavailable_options" as never)
+      .select("outlet_id, option_id, customization_options:option_id(name, item_customization_groups:group_id(name))" as never)
+      .eq("outlet_id" as never, selectedOutlet as never);
+
+    const mappedOpts = ((blockedOptData as never[]) ?? []).map((row: never) => {
+      const r = row as Record<string, unknown>;
+      const opt = r.customization_options as Record<string, unknown> | null;
+      const grp = opt?.item_customization_groups as { name: string } | null;
+      return {
+        outlet_id: r.outlet_id as string,
+        option_id: r.option_id as string,
+        option_name: (opt?.name as string) ?? "Unknown",
+        group_name: grp?.name ?? "Unknown",
+      };
+    });
+    setBlockedOptions(mappedOpts);
+
+    setAlertsLoading(false);
+  }, [supabase, selectedOutlet]);
+
+  const handleReenableItem = async (itemId: string) => {
+    const { error } = await supabase
+      .from("outlet_menu_items")
+      .update({ is_available: true })
+      .eq("outlet_id", selectedOutlet)
+      .eq("item_id", itemId);
+    if (error) {
+      toast.error("Failed to re-enable item");
+    } else {
+      toast.success("Item re-enabled on customer menu");
+      fetchAlerts();
+    }
+  };
+
+  const handleReenableOption = async (optionId: string) => {
+    const { error } = await supabase
+      .from("outlet_unavailable_options" as never)
+      .delete()
+      .eq("outlet_id" as never, selectedOutlet as never)
+      .eq("option_id" as never, optionId as never);
+    if (error) {
+      toast.error("Failed to re-enable option");
+    } else {
+      toast.success("Option re-enabled on customer menu");
+      fetchAlerts();
+    }
+  };
+
+  const handleMarkAlertRead = async (alertId: string) => {
+    await supabase
+      .from("inventory_stock_alerts" as never)
+      .update({ is_read: true } as never)
+      .eq("id" as never, alertId as never);
+    setAlerts((prev) => prev.map((a) => a.id === alertId ? { ...a, is_read: true } : a));
+  };
 
   useEffect(() => {
-    if (!selectedOutlet) return;
+    if (!selectedOutlet || !isManager) return;
+    fetchItems();
+    fetchMenuItems();
+  }, [selectedOutlet, isManager, fetchItems, fetchMenuItems]);
+
+  useEffect(() => {
+    if (!selectedOutlet || !isManager) return;
     if (activeTab === "recipes") { fetchRecipes(); fetchOptionRecipes(); fetchCustomizationOptions(); }
     if (activeTab === "log") fetchLogs();
-  }, [selectedOutlet, activeTab, fetchRecipes, fetchOptionRecipes, fetchCustomizationOptions, fetchLogs]);
+    if (activeTab === "alerts") fetchAlerts();
+  }, [selectedOutlet, isManager, activeTab, fetchRecipes, fetchOptionRecipes, fetchCustomizationOptions, fetchLogs, fetchAlerts]);
 
   // --- Materials CRUD ---
   const openAddItem = () => {
@@ -383,13 +528,13 @@ export default function AdminInventoryPage() {
     };
 
     try {
-      const res = await fetch("/api/admin/inventory", {
+      const res = await fetch("/api/restaurant/inventory", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           editingItem
-            ? { action: "update", item_id: editingItem.id, payload }
-            : { action: "insert", payload }
+            ? { action: "update", item_id: editingItem.id, payload, outlet_id: selectedOutlet }
+            : { action: "insert", payload, outlet_id: selectedOutlet }
         ),
       });
       const json = await res.json();
@@ -417,10 +562,10 @@ export default function AdminInventoryPage() {
 
   const handleDeleteItem = async (item: InventoryItem) => {
     try {
-      const res = await fetch("/api/admin/inventory", {
+      const res = await fetch("/api/restaurant/inventory", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "delete", item_id: item.id }),
+        body: JSON.stringify({ action: "delete", item_id: item.id, outlet_id: selectedOutlet }),
       });
       if (!res.ok) {
         const json = await res.json();
@@ -521,29 +666,6 @@ export default function AdminInventoryPage() {
     }
   };
 
-  // --- Low Stock Email Alert ---
-  const sendLowStockEmail = async (item: InventoryItem, newQuantity: number) => {
-    if (newQuantity > item.min_stock_level || item.min_stock_level <= 0) return;
-    const outlet = outlets.find((o) => o.id === selectedOutlet);
-    try {
-      await fetch("/api/admin/inventory-alerts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          inventory_item_id: item.id,
-          item_name: item.name,
-          quantity: newQuantity,
-          min_stock_level: item.min_stock_level,
-          unit: item.unit,
-          outlet_name: outlet?.name || "Unknown",
-          outlet_id: selectedOutlet,
-        }),
-      });
-    } catch {
-      // Email alert is non-blocking
-    }
-  };
-
   // --- Stock Update ---
   const handleStockUpdate = async () => {
     if (!stockItem || !stockQuantity) return;
@@ -567,12 +689,13 @@ export default function AdminInventoryPage() {
     const quantityChange = isAddition ? qty : -qty;
 
     try {
-      const res = await fetch("/api/admin/inventory", {
+      const res = await fetch("/api/restaurant/inventory", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "stock_update",
           item_id: item.id,
+          outlet_id: selectedOutlet,
           payload: { quantity: newQuantity },
           log_payload: {
             inventory_item_id: item.id,
@@ -589,7 +712,6 @@ export default function AdminInventoryPage() {
       }
 
       toast.success(`Stock ${isAddition ? "added" : "deducted"} successfully`);
-      sendLowStockEmail(item, newQuantity);
       setStockItem("");
       setStockQuantity("");
       setStockNotes("");
@@ -627,22 +749,6 @@ export default function AdminInventoryPage() {
         toast.success(`Inventory deducted for ${qty} unit(s)`);
         setDeductMenuItem("");
         setDeductQuantity("1");
-        // Re-fetch and check for low stock items after deduction
-        try {
-          const res = await fetch(`/api/admin/inventory?outlet_id=${selectedOutlet}`);
-          const json = await res.json();
-          if (res.ok && json.items) {
-            const updated = json.items as InventoryItem[];
-            updated.forEach((ui) => {
-              if (ui.quantity <= ui.min_stock_level && ui.min_stock_level > 0) {
-                const prev = items.find((old) => old.id === ui.id);
-                if (prev && prev.quantity > prev.min_stock_level) {
-                  sendLowStockEmail(ui, ui.quantity);
-                }
-              }
-            });
-          }
-        } catch { /* non-blocking */ }
         fetchItems();
       }
     } catch {
@@ -668,22 +774,35 @@ export default function AdminInventoryPage() {
     );
   }
 
+  if (!isManager) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-brand-gray-400">
+        <Package className="w-12 h-12 mb-3" />
+        <p className="text-base font-semibold">Access Restricted</p>
+        <p className="text-sm mt-1">Only outlet managers can access inventory management</p>
+      </div>
+    );
+  }
+
+  if (!selectedOutlet) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-brand-gray-400">
+        <Package className="w-12 h-12 mb-3" />
+        <p className="text-base font-semibold">No outlet selected</p>
+        <p className="text-sm mt-1">Please select an outlet from the navigation</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {/* Outlet Selector */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
         <div className="flex items-center gap-2">
           <Package className="w-5 h-5 text-brand-yellow-dark" />
-          <label className="text-sm font-semibold text-brand-gray-700">Outlet:</label>
-          <select
-            value={selectedOutlet}
-            onChange={(e) => setSelectedOutlet(e.target.value)}
-            className="text-sm border border-brand-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-brand-yellow/50"
-          >
-            {outlets.map((o) => (
-              <option key={o.id} value={o.id}>{o.name}</option>
-            ))}
-          </select>
+          <h2 className="text-lg font-semibold text-brand-black font-[family-name:var(--font-heading)]">
+            {outletName} — Inventory
+          </h2>
         </div>
 
         {lowStockItems.length > 0 && (
@@ -692,30 +811,6 @@ export default function AdminInventoryPage() {
             <span className="text-xs font-semibold text-red-700">
               {lowStockItems.length} item{lowStockItems.length !== 1 ? "s" : ""} below minimum stock
             </span>
-            <button
-              onClick={async () => {
-                const outlet = outlets.find((o) => o.id === selectedOutlet);
-                for (const item of lowStockItems) {
-                  await fetch("/api/admin/inventory-alerts", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      inventory_item_id: item.id,
-                      item_name: item.name,
-                      quantity: item.quantity,
-                      min_stock_level: item.min_stock_level,
-                      unit: item.unit,
-                      outlet_name: outlet?.name || "Unknown",
-                      outlet_id: selectedOutlet,
-                    }),
-                  });
-                }
-                toast.success("Low stock alert emails sent");
-              }}
-              className="ml-auto text-xs font-medium text-red-600 hover:text-red-800 underline underline-offset-2 whitespace-nowrap"
-            >
-              Notify via Email
-            </button>
           </div>
         )}
       </div>
@@ -726,7 +821,6 @@ export default function AdminInventoryPage() {
       {/* Raw Materials Tab */}
       {activeTab === "materials" && (
         <div className="space-y-4">
-          {/* Search + Filter + Add */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <div className="relative flex-1 w-full sm:max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-gray-400" />
@@ -956,7 +1050,6 @@ export default function AdminInventoryPage() {
       {/* Stock Update Tab */}
       {activeTab === "stock" && (
         <div className="space-y-6">
-          {/* Manual Stock Update */}
           <div className="bg-white rounded-xl border border-brand-gray-100 p-6 space-y-4">
             <div className="flex items-center gap-2 mb-2">
               <ArrowUpCircle className="w-5 h-5 text-brand-green" />
@@ -1026,7 +1119,6 @@ export default function AdminInventoryPage() {
             </Button>
           </div>
 
-          {/* Recipe-based Deduction */}
           <div className="bg-white rounded-xl border border-brand-gray-100 p-6 space-y-4">
             <div className="flex items-center gap-2 mb-2">
               <ChefHat className="w-5 h-5 text-brand-yellow-dark" />
@@ -1129,6 +1221,135 @@ export default function AdminInventoryPage() {
                 </tbody>
               </table>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Stock Alerts Tab */}
+      {activeTab === "alerts" && (
+        <div className="space-y-6">
+          {alertsLoading ? (
+            <div className="flex justify-center py-10"><Spinner size="lg" /></div>
+          ) : (
+            <>
+              {/* Blocked Menu Items */}
+              {blockedItems.length > 0 && (
+                <div className="bg-white rounded-xl border border-red-100 p-5 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 text-red-500" />
+                    <h3 className="font-semibold text-brand-black font-[family-name:var(--font-heading)]">
+                      Blocked Menu Items ({blockedItems.length})
+                    </h3>
+                  </div>
+                  <p className="text-sm text-brand-gray-500">
+                    These items are hidden from customers due to stock-outs. Re-enable after restocking.
+                  </p>
+                  <div className="divide-y divide-brand-gray-50">
+                    {blockedItems.map((bi) => (
+                      <div key={bi.item_id} className="flex items-center justify-between py-2.5">
+                        <span className="text-sm font-medium text-brand-black">{bi.item_name}</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleReenableItem(bi.item_id)}
+                          className="text-brand-green hover:text-brand-green"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          Re-enable
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Blocked Customization Options */}
+              {blockedOptions.length > 0 && (
+                <div className="bg-white rounded-xl border border-orange-100 p-5 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 text-orange-500" />
+                    <h3 className="font-semibold text-brand-black font-[family-name:var(--font-heading)]">
+                      Blocked Customization Options ({blockedOptions.length})
+                    </h3>
+                  </div>
+                  <p className="text-sm text-brand-gray-500">
+                    These options are hidden from customers. Re-enable after confirming stock is available.
+                  </p>
+                  <div className="divide-y divide-brand-gray-50">
+                    {blockedOptions.map((bo) => (
+                      <div key={bo.option_id} className="flex items-center justify-between py-2.5">
+                        <div>
+                          <span className="text-sm font-medium text-brand-black">{bo.option_name}</span>
+                          <span className="ml-2 text-xs text-brand-gray-400">({bo.group_name})</span>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleReenableOption(bo.option_id)}
+                          className="text-brand-green hover:text-brand-green"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          Re-enable
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Recent Alerts */}
+              <div className="bg-white rounded-xl border border-brand-gray-100 p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-brand-gray-500" />
+                  <h3 className="font-semibold text-brand-black font-[family-name:var(--font-heading)]">
+                    Recent Alerts
+                  </h3>
+                </div>
+                {alerts.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-10 text-brand-gray-400">
+                    <Bell className="w-10 h-10 mb-2" />
+                    <p className="text-sm font-semibold">No stock alerts</p>
+                    <p className="text-xs mt-1">Alerts appear when items are auto-blocked due to stock-outs</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-brand-gray-50 max-h-[400px] overflow-y-auto">
+                    {alerts.map((alert) => (
+                      <div key={alert.id} className={cn("flex items-start gap-3 py-3", alert.is_read && "opacity-50")}>
+                        <div className={cn(
+                          "w-2 h-2 rounded-full mt-1.5 shrink-0",
+                          alert.alert_type === "out_of_stock" ? "bg-red-500" :
+                          alert.alert_type === "item_blocked" ? "bg-red-400" :
+                          alert.alert_type === "option_blocked" ? "bg-orange-400" :
+                          "bg-yellow-400"
+                        )} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-brand-black">{alert.message}</p>
+                          <p className="text-xs text-brand-gray-400 mt-0.5">
+                            {new Date(alert.created_at).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}
+                          </p>
+                        </div>
+                        {!alert.is_read && (
+                          <button
+                            onClick={() => handleMarkAlertRead(alert.id)}
+                            className="text-xs text-brand-gray-400 hover:text-brand-gray-600 shrink-0"
+                          >
+                            Mark read
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {blockedItems.length === 0 && blockedOptions.length === 0 && alerts.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-16 text-brand-gray-400">
+                  <CheckCircle2 className="w-12 h-12 mb-3" />
+                  <p className="text-base font-semibold">All clear</p>
+                  <p className="text-sm mt-1">No blocked items or stock alerts</p>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

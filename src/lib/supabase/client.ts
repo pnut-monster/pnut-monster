@@ -28,17 +28,21 @@ function isAdminPath(): boolean {
   return window.location.pathname.startsWith("/admin");
 }
 
-export function createClient() {
+export function createClient(cookieName?: string) {
   const supabaseUrl = resolveSupabaseUrlForBrowser(
     process.env.NEXT_PUBLIC_SUPABASE_URL!
   );
 
-  const isAdmin = isAdminPath();
+  const isAdmin = cookieName
+    ? cookieName === "sb-admin-auth-token"
+    : isAdminPath();
 
-  if (typeof window !== "undefined") {
+  if (typeof window !== "undefined" && !cookieName) {
     if (isAdmin && adminBrowserClient) return adminBrowserClient;
     if (!isAdmin && browserClient) return browserClient;
   }
+
+  const resolvedCookie = cookieName ?? (isAdmin ? "sb-admin-auth-token" : "sb-customer-auth-token");
 
   const client = createBrowserClient<Database>(
     supabaseUrl,
@@ -48,7 +52,7 @@ export function createClient() {
         lock: async (_name, _acquireTimeout, fn) => fn(),
       },
       cookieOptions: {
-        name: isAdmin ? "sb-admin-auth-token" : "sb-customer-auth-token",
+        name: resolvedCookie,
         path: "/",
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
@@ -56,7 +60,7 @@ export function createClient() {
     }
   );
 
-  if (typeof window !== "undefined") {
+  if (typeof window !== "undefined" && !cookieName) {
     if (isAdmin) {
       adminBrowserClient = client;
     } else {

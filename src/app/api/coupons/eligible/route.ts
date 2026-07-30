@@ -122,7 +122,7 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ coupons: [] });
+    return NextResponse.json({ coupons: [], reason: "unauthenticated" });
   }
 
   const admin = createAdminClient();
@@ -131,7 +131,7 @@ export async function POST(request: Request) {
     .from("coupons")
     .select("*")
     .eq("is_active", true)
-    .or("status.is.null,status.eq.active")
+    .eq("status", "active")
     .lte("starts_at", now)
     .gt("ends_at", now)
     .order("priority" as never, { ascending: false })
@@ -143,7 +143,11 @@ export async function POST(request: Request) {
 
   const { data: couponData, error: couponError } = await couponQuery;
   if (couponError) {
-    return NextResponse.json({ coupons: [] }, { status: 500 });
+    console.error("Coupon query failed:", couponError.message);
+    return NextResponse.json(
+      { coupons: [], error: "Failed to load coupons" },
+      { status: 500 }
+    );
   }
 
   const coupons = (couponData ?? []) as ExtendedCoupon[];

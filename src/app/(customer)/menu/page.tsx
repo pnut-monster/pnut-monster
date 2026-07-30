@@ -33,7 +33,7 @@ type MenuItemSummary = Pick<
   | "is_new"
   | "is_active"
   | "sort_order"
->;
+> & { _unavailable?: boolean };
 
 interface CategoryWithItems extends MenuCategorySummary {
   subcategories: (MenuSubcategorySummary & { items: MenuItemSummary[] })[];
@@ -194,11 +194,12 @@ export default function MenuPage() {
 
         for (const subcategory of subcats) {
           const items = subcategory.menu_items.reduce<MenuItemSummary[]>((visibleItems, item) => {
+            if (!item.is_active) return visibleItems;
             const avail = availMap.get(item.id);
-            if (!item.is_active || avail?.is_available === false) return visibleItems;
             visibleItems.push({
               ...item,
               base_price: avail?.price_override ?? item.base_price,
+              _unavailable: avail?.is_available === false,
             });
             return visibleItems;
           }, []);
@@ -464,14 +465,21 @@ export default function MenuPage() {
 
 function MenuItemCard({ item }: { item: MenuItemSummary }) {
   const router = useRouter();
+  const unavailable = item._unavailable === true;
 
   return (
     <button
-      onClick={() => router.push(`/menu/${item.slug}`)}
-      className="flex w-full items-start gap-3 rounded-2xl bg-white p-3 text-left border border-brand-gray-200 hover:border-brand-yellow hover:shadow-lg transition-all active:scale-[0.98]"
+      onClick={() => { if (!unavailable) router.push(`/menu/${item.slug}`); }}
+      disabled={unavailable}
+      className={cn(
+        "flex w-full items-start gap-3 rounded-2xl bg-white p-3 text-left border transition-all",
+        unavailable
+          ? "border-brand-gray-100 opacity-60 cursor-not-allowed"
+          : "border-brand-gray-200 hover:border-brand-yellow hover:shadow-lg active:scale-[0.98]"
+      )}
     >
-      {/* Image placeholder */}
-      <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-xl bg-white">
+      {/* Image */}
+      <div className={cn("relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-xl bg-white", unavailable && "grayscale")}>
         {item.image_url ? (
           <Image
             src={getImageUrl(item.image_url) ?? ""}
@@ -498,7 +506,7 @@ function MenuItemCard({ item }: { item: MenuItemSummary }) {
 
       <div className="flex-1 overflow-hidden">
         <div className="flex items-start gap-1">
-          <h4 className="font-[family-name:var(--font-heading)] text-sm font-bold text-brand-black">
+          <h4 className={cn("font-[family-name:var(--font-heading)] text-sm font-bold", unavailable ? "text-brand-gray-400" : "text-brand-black")}>
             {item.name}
           </h4>
           {item.is_bestseller && (
@@ -512,12 +520,18 @@ function MenuItemCard({ item }: { item: MenuItemSummary }) {
           <p className="mt-0.5 line-clamp-2 text-xs text-brand-gray-500">{item.description}</p>
         )}
         <div className="mt-2 flex items-center justify-between">
-          <span className="font-[family-name:var(--font-heading)] text-base font-bold text-brand-black">
+          <span className={cn("font-[family-name:var(--font-heading)] text-base font-bold", unavailable ? "text-brand-gray-400" : "text-brand-black")}>
             {formatCurrency(item.base_price)}
           </span>
-          <span className="flex items-center gap-1 rounded-xl bg-brand-yellow hover:bg-brand-yellow-dark px-3 py-1.5 text-xs font-bold text-brand-black transition-colors shadow-sm">
-            <Plus className="h-3.5 w-3.5" /> ADD
-          </span>
+          {unavailable ? (
+            <span className="rounded-xl bg-brand-gray-100 px-3 py-1.5 text-xs font-semibold text-brand-gray-500">
+              Currently unavailable
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 rounded-xl bg-brand-yellow hover:bg-brand-yellow-dark px-3 py-1.5 text-xs font-bold text-brand-black transition-colors shadow-sm">
+              <Plus className="h-3.5 w-3.5" /> ADD
+            </span>
+          )}
         </div>
       </div>
     </button>

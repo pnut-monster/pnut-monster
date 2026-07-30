@@ -151,12 +151,42 @@ export default function CartPage() {
   useEffect(() => {
     if (!couponsLoaded || !coupon_code) return;
     const stillEligible = availableCoupons.some((coupon) => coupon.code === coupon_code);
-    if (!stillEligible) {
-      setCoupon(null, 0);
-      setCouponInput("");
-      setCouponError(null);
+    if (stillEligible) return;
+
+    let cancelled = false;
+    async function revalidate() {
+      try {
+        const response = await fetch("/api/coupons/eligible", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            code: coupon_code,
+            subtotal,
+            outlet_id: selectedOutlet?.id ?? null,
+            items: couponItems,
+          }),
+        });
+        if (cancelled) return;
+        const data = response.ok
+          ? ((await response.json()) as { coupons?: ExtendedCoupon[] })
+          : { coupons: [] };
+        if (cancelled) return;
+        if (!data.coupons || data.coupons.length === 0) {
+          setCoupon(null, 0);
+          setCouponInput("");
+          setCouponError(null);
+        }
+      } catch {
+        if (!cancelled) {
+          setCoupon(null, 0);
+          setCouponInput("");
+          setCouponError(null);
+        }
+      }
     }
-  }, [availableCoupons, coupon_code, couponsLoaded, setCoupon]);
+    revalidate();
+    return () => { cancelled = true; };
+  }, [availableCoupons, coupon_code, couponsLoaded, setCoupon, subtotal, selectedOutlet?.id, couponItems]);
 
   useEffect(() => {
     if (subtotal <= 0) {
@@ -204,6 +234,7 @@ export default function CartPage() {
     setCouponError(null);
 
     let coupon: ExtendedCoupon | null = null;
+    let serverError = false;
 
     try {
       const response = await fetch("/api/coupons/eligible", {
@@ -216,13 +247,27 @@ export default function CartPage() {
           items: couponItems,
         }),
       });
-      const data = response.ok
-        ? ((await response.json()) as { coupons?: ExtendedCoupon[] })
-        : { coupons: [] };
+      if (!response.ok) {
+        serverError = true;
+      }
+      const data = (await response.json()) as { coupons?: ExtendedCoupon[]; reason?: string };
+      if (data.reason === "unauthenticated") {
+        setCouponError("Please log in to apply coupons");
+        setCoupon(null, 0);
+        setCouponLoading(false);
+        return;
+      }
       coupon = data.coupons?.[0] ?? null;
     } catch (err) {
       console.error("Failed to validate coupon:", err);
+      serverError = true;
       coupon = null;
+    }
+
+    if (serverError && !coupon) {
+      setCouponError("Something went wrong. Please try again.");
+      setCouponLoading(false);
+      return;
     }
 
     if (!coupon) {

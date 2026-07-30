@@ -1,0 +1,154 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+async function getAuthenticatedManager(outletId: string) {
+  // Auto-detect which auth token is present (admin or customer/restaurant)
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const admin = createAdminClient();
+
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile) return null;
+  const role = (profile as { role: string }).role;
+
+  if (["admin", "super_admin"].includes(role)) {
+    return user;
+  }
+
+  if (role !== "outlet_staff") return null;
+
+  const { data: assignment } = await (admin as any)
+    .from("outlet_staff")
+    .select("is_manager")
+    .eq("user_id", user.id)
+    .eq("outlet_id", outletId)
+    .single();
+
+  if (!assignment || !(assignment as { is_manager: boolean }).is_manager) {
+    return null;
+  }
+
+  return user;
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { action, payload, item_id, log_payload, outlet_id } = body as {
+      action: "insert" | "update" | "delete" | "stock_update";
+      payload?: Record<string, unknown>;
+      item_id?: string;
+      log_payload?: Record<string, unknown>;
+      outlet_id?: string;
+    };
+
+    const effectiveOutletId = (payload?.outlet_id as string) || outlet_id;
+    if (!effectiveOutletId) {
+      return NextResponse.json({ error: "outlet_id required" }, { status: 400 });
+    }
+
+    const user = await getAuthenticatedManager(effectiveOutletId);
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const admin = createAdminClient();
+
+    if (action === "insert" && payload) {
+      const { data, error } = await (admin as any)
+        .from("inventory_items")
+        .insert({ ...payload, outlet_id: effectiveOutletId })
+        .select()
+        .single();
+      if (error) {
+        return NextResponse.json({ error: error.message, code: error.code, details: error.details }, { status: 400 });
+      }
+      return NextResponse.json({ success: true, data });
+    }
+
+    if (action === "update" && item_id && payload) {
+      const { data, error } = await (admin as any)
+        .from("inventory_items")
+        .update(payload)
+        .eq("id", item_id)
+        .eq("outlet_id", effectiveOutletId)
+        .select()
+        .single();
+      if (error) {
+        return NextResponse.json({ error: error.message, code: error.code, details: error.details }, { status: 400 });
+      }
+      return NextResponse.json({ success: true, data });
+    }
+
+    if (action === "stock_update" && item_id && payload && log_payload) {
+      const { error: updateError } = await (admin as any)
+        .from("inventory_items")
+        .update(payload)
+        .eq("id", item_id)
+        .eq("outlet_id", effectiveOutletId);
+      if (updateError) {
+        return NextResponse.json({ error: updateError.message, code: updateError.code }, { status: 400 });
+      }
+      const { error: logError } = await (admin as any)
+        .from("inventory_logs")
+        .insert({ ...log_payload, performed_by: user.id });
+      if (logError) {
+        return NextResponse.json({ error: logError.message, code: logError.code }, { status: 400 });
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    if (action === "delete" && item_id) {
+      const { error } = await (admin as any)
+        .from("inventory_items")
+        .delete()
+        .eq("id", item_id)
+        .eq("outlet_id", effectiveOutletId);
+      if (error) {
+        return NextResponse.json({ error: error.message, code: error.code, details: error.details }, { status: 400 });
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+  } catch {
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
+
+export async function GET(request: NextRequest) {
+  const outletId = request.nextUrl.searchParams.get("outlet_id");
+  if (!outletId) {
+    return NextResponse.json({ error: "outlet_id required" }, { status: 400 });
+  }
+
+  const user = await getAuthenticatedManager(outletId);
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await (admin as any)
+    .from("inventory_items")
+    .select("*")
+    .eq("outlet_id", outletId)
+    .order("category")
+    .order("name");
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ items: data ?? [] });
+}

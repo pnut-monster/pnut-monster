@@ -17,6 +17,7 @@ import {
   ChevronDown,
   Volume2,
   VolumeX,
+  Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils/helpers";
 import { createClient } from "@/lib/supabase/client";
@@ -24,10 +25,11 @@ import type { Outlet, Order, Profile } from "@/lib/supabase/types";
 import toast from "react-hot-toast";
 
 const SIDEBAR_ITEMS = [
-  { href: "/restaurant", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/restaurant/orders", label: "Orders", icon: ShoppingBag },
-  { href: "/restaurant/menu", label: "Menu", icon: UtensilsCrossed },
-  { href: "/restaurant/settings", label: "Settings", icon: Settings },
+  { href: "/restaurant", label: "Dashboard", icon: LayoutDashboard, managerOnly: false },
+  { href: "/restaurant/orders", label: "Orders", icon: ShoppingBag, managerOnly: false },
+  { href: "/restaurant/menu", label: "Menu", icon: UtensilsCrossed, managerOnly: false },
+  { href: "/restaurant/inventory", label: "Inventory", icon: Package, managerOnly: true },
+  { href: "/restaurant/settings", label: "Settings", icon: Settings, managerOnly: false },
 ] as const;
 
 function getPageTitle(pathname: string): string {
@@ -36,6 +38,7 @@ function getPageTitle(pathname: string): string {
   );
   return item?.label ?? "Restaurant";
 }
+
 
 export function RestaurantShell({
   children,
@@ -49,6 +52,7 @@ export function RestaurantShell({
   const [staffProfile, setStaffProfile] = useState<Profile | null>(null);
   const [managedOutlets, setManagedOutlets] = useState<Outlet[]>([]);
   const [selectedOutlet, setSelectedOutlet] = useState<Outlet | null>(null);
+  const [isManager, setIsManager] = useState(false);
   const [orderSoundEnabled, setOrderSoundEnabled] = useState(() =>
     typeof window === "undefined" || localStorage.getItem("pnut_restaurant_order_sound") !== "false"
   );
@@ -97,12 +101,17 @@ export function RestaurantShell({
 
   useEffect(() => {
     async function loadStaffData() {
-      const supabase = createClient();
+      let supabase = createClient();
 
       try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        let { data: { user } } = await supabase.auth.getUser();
+
+        // Fallback: admin users on /restaurant paths only have sb-admin-auth-token
+        if (!user) {
+          supabase = createClient("sb-admin-auth-token");
+          const result = await supabase.auth.getUser();
+          user = result.data.user;
+        }
 
         if (user) {
           // Fetch profile
@@ -119,6 +128,7 @@ export function RestaurantShell({
 
           let outlets: Outlet[] = [];
           if (typedProfile && ["admin", "super_admin"].includes(typedProfile.role)) {
+            setIsManager(true);
             const { data } = await supabase
               .from("outlets")
               .select("*")
@@ -128,10 +138,12 @@ export function RestaurantShell({
           } else {
             const { data: assignments } = await supabase
               .from("outlet_staff" as never)
-              .select("outlet_id")
+              .select("outlet_id, is_manager" as never)
               .eq("user_id" as never, user.id as never);
-            const outletIds = ((assignments as { outlet_id: string }[] | null) ?? [])
-              .map((assignment) => assignment.outlet_id);
+            const typedAssignments = (assignments as { outlet_id: string; is_manager: boolean }[] | null) ?? [];
+            const outletIds = typedAssignments.map((assignment) => assignment.outlet_id);
+            const hasManagerRole = typedAssignments.some((a) => a.is_manager);
+            setIsManager(hasManagerRole);
 
             if (outletIds.length > 0) {
               const { data } = await supabase
@@ -310,7 +322,7 @@ export function RestaurantShell({
 
         {/* Nav items */}
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          {SIDEBAR_ITEMS.map((item) => {
+          {SIDEBAR_ITEMS.filter((item) => !item.managerOnly || isManager).map((item) => {
             const isActive =
               item.href === "/restaurant"
                 ? pathname === "/restaurant"

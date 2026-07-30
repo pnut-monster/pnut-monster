@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useCartStore, type CartCustomization } from "@/lib/stores/cart-store";
+import { useOutletStore } from "@/lib/stores/outlet-store";
 import type {
   MenuItem,
   CustomizationGroup,
@@ -50,6 +51,7 @@ export default function ItemDetailPage() {
   const slug = params.slug as string;
 
   const addItem = useCartStore((s) => s.addItem);
+  const selectedOutlet = useOutletStore((s) => s.selectedOutlet);
 
   const [item, setItem] = useState<MenuItem | null>(null);
   const [groups, setGroups] = useState<GroupWithOptions[]>([]);
@@ -100,14 +102,26 @@ export default function ItemDetailPage() {
           if (fetchedGroups.length > 0) {
             // 3. Fetch all options for these groups
             const groupIds = fetchedGroups.map((g) => g.id);
-            const { data: optionsData } = await supabase
-              .from("customization_options")
-              .select("*")
-              .in("group_id", groupIds)
-              .eq("is_active", true)
-              .order("sort_order", { ascending: true });
+            const [optionsResult, unavailableResult] = await Promise.all([
+              supabase
+                .from("customization_options")
+                .select("*")
+                .in("group_id", groupIds)
+                .eq("is_active", true)
+                .order("sort_order", { ascending: true }),
+              selectedOutlet
+                ? supabase
+                    .from("outlet_unavailable_options" as never)
+                    .select("option_id" as never)
+                    .eq("outlet_id" as never, selectedOutlet.id as never)
+                : Promise.resolve({ data: [] }),
+            ]);
 
-            fetchedOptions = (optionsData ?? []) as CustomizationOption[];
+            const allOptions = (optionsResult.data ?? []) as CustomizationOption[];
+            const unavailableIds = new Set(
+              ((unavailableResult.data ?? []) as { option_id: string }[]).map((r) => r.option_id)
+            );
+            fetchedOptions = allOptions.filter((o) => !unavailableIds.has(o.id));
           }
         }
       } catch (err) {
@@ -156,7 +170,7 @@ export default function ItemDetailPage() {
     }
 
     fetchItem();
-  }, [slug]);
+  }, [slug, selectedOutlet]);
 
   // Filter and order the steps that exist for this item
   const steps = useMemo(() => {

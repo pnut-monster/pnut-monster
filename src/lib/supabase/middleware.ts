@@ -68,7 +68,27 @@ export async function updateSession(request: NextRequest) {
   const isAdminRoute = matchesPath("/admin");
   const isRestaurantRoute = matchesPath("/restaurant");
   const isProtectedCustomerRoute = PROTECTED_CUSTOMER_PATHS.some(matchesPath);
+  const isApiRoute = matchesPath("/api");
   const isHomepage = pathname === "/";
+
+  if (isApiRoute) {
+    const storageKey = pathname.startsWith("/api/admin")
+      ? "sb-admin-auth-token"
+      : "sb-customer-auth-token";
+    const { supabase: apiSupabase, getResponse: apiGetResponse } =
+      createSupabaseMiddlewareClient(request, storageKey);
+    const { data: { user: apiUser } } = await apiSupabase.auth.getUser();
+
+    // Fallback for restaurant API: admin users may only have admin token
+    if (!apiUser && pathname.startsWith("/api/restaurant")) {
+      const { supabase: adminApi, getResponse: adminApiResponse } =
+        createSupabaseMiddlewareClient(request, "sb-admin-auth-token");
+      await adminApi.auth.getUser();
+      return adminApiResponse();
+    }
+
+    return apiGetResponse();
+  }
 
   if (
     PUBLIC_PATHS.some(matchesPath) ||
@@ -164,17 +184,33 @@ export async function updateSession(request: NextRequest) {
     }
 
     if (isRestaurantRoute) {
-      if (!user) {
+      let restaurantUser = user;
+      let profileClient = supabase;
+      let restaurantResponse = getResponse;
+
+      // Fallback: admin users navigating to restaurant panel may only have admin token
+      if (!restaurantUser) {
+        const { supabase: adminSupabase, getResponse: adminGetResponse } =
+          createSupabaseMiddlewareClient(request, "sb-admin-auth-token");
+        const { data: { user: adminUser } } = await adminSupabase.auth.getUser();
+        if (adminUser) {
+          restaurantUser = adminUser;
+          profileClient = adminSupabase;
+          restaurantResponse = adminGetResponse;
+        }
+      }
+
+      if (!restaurantUser) {
         const url = request.nextUrl.clone();
         url.pathname = "/restaurant/login";
         url.searchParams.set("redirect", pathname);
         return NextResponse.redirect(url);
       }
 
-      const { data: profile } = await supabase
+      const { data: profile } = await profileClient
         .from("profiles")
         .select("role")
-        .eq("id", user.id)
+        .eq("id", restaurantUser.id)
         .single();
 
       if (
@@ -186,7 +222,7 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url);
       }
 
-      return getResponse();
+      return restaurantResponse();
     }
 
     if (isProtectedCustomerRoute && !user) {

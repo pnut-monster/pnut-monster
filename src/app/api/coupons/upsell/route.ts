@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     .from("coupons")
     .select("*")
     .eq("is_active", true)
-    .or("status.is.null,status.eq.active")
+    .eq("status", "active")
     .lte("starts_at", now)
     .gt("ends_at", now)
     .order("priority" as never, { ascending: false })

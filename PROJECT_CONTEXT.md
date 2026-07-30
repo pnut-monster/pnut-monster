@@ -406,8 +406,8 @@ Migrations define indexes for common lookup paths: profile phone/referral/role, 
 ### Restaurant Order Operations
 
 - Purpose: outlet staff manage live orders.
-- Flow: restaurant shell loads allowed outlets; orders page subscribes to outlet orders, polls every 15 seconds, auto-accepts if configured, moves orders by RPC, completes with pickup code, rejects/refunds.
-- Related models/RPCs: `orders`, `order_items`, `outlet_staff`, `update_order_status`, `complete_order_with_pickup_code`, `reject_and_refund_order`.
+- Flow: restaurant shell loads allowed outlets; orders page subscribes to outlet orders, polls every 15 seconds, auto-accepts if configured, moves orders by RPC, completes with pickup code, rejects/refunds, cancels accepted/preparing orders with reason.
+- Related models/RPCs: `orders`, `order_items`, `outlet_staff`, `update_order_status`, `complete_order_with_pickup_code`, `reject_and_refund_order`, `cancel_accepted_order`.
 
 ### Restaurant Menu and Settings
 
@@ -485,6 +485,22 @@ At the time this file was created, the worktree already had uncommitted changes 
 Future sessions must not revert these without explicit user instruction.
 
 ## Change Log
+
+## 2026-07-29
+
+### Added
+
+- Restaurant panel can now cancel orders after accepting or while preparing by
+  providing a mandatory cancellation reason. Added migration
+  `20240101000061_cancel_accepted_order.sql` with `cancellation_reason` column on
+  `orders` and a new `cancel_accepted_order(p_order_id, p_reason)` RPC that
+  validates reason, enforces `can_manage_order`, only allows `confirmed`/`preparing`
+  status, refunds wallet and loyalty points, and sets status to `cancelled`.
+- Updated restaurant orders page with a "Cancel Order" button (below primary action)
+  on confirmed and preparing order cards, which opens a reason dialog modal.
+  Confirmation is disabled until a reason is entered; submission calls the new RPC.
+- Updated `src/lib/supabase/types.ts` with `cancellation_reason` field and
+  `cancel_accepted_order` RPC type.
 
 ## 2026-07-21
 

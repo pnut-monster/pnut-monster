@@ -11,6 +11,7 @@ import {
   Volume2,
   VolumeX,
   AlertCircle,
+  XCircle,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils/helpers";
@@ -276,6 +277,32 @@ export default function RestaurantOrdersPage() {
     setOrders((prev) => prev.filter((o) => o.id !== orderId));
   }
 
+  async function cancelOrder(orderId: string, reason: string) {
+    const supabase = createClient();
+
+    try {
+      const { data, error } = await supabase.rpc("cancel_accepted_order" as never, {
+        p_order_id: orderId,
+        p_reason: reason,
+      } as never);
+
+      if (error) throw error;
+
+      const result = data as { wallet_refunded: number } | null;
+      if (result && result.wallet_refunded > 0) {
+        toast.success(`Order cancelled. ₹${result.wallet_refunded} refunded to customer wallet.`);
+      } else {
+        toast.success("Order cancelled and refund processed.");
+      }
+    } catch (err) {
+      console.error("[Restaurant Orders] Failed to cancel order:", err);
+      toast.error("Could not cancel order");
+      return;
+    }
+
+    setOrders((prev) => prev.filter((o) => o.id !== orderId));
+  }
+
   function handleAutoAcceptToggle() {
     const next = !autoAccept;
     setAutoAccept(next);
@@ -404,6 +431,7 @@ export default function RestaurantOrdersPage() {
               timeSince={timeSince}
               onAccept={() => updateOrderStatus(order.id, "confirmed")}
               onReject={() => rejectOrder(order.id)}
+              onCancel={(reason) => cancelOrder(order.id, reason)}
               onStartPreparing={() => updateOrderStatus(order.id, "preparing")}
               onMarkReady={() => updateOrderStatus(order.id, "ready")}
               onComplete={(code) => completeOrder(order.id, code)}
@@ -425,6 +453,7 @@ function OrderCard({
   timeSince,
   onAccept,
   onReject,
+  onCancel,
   onStartPreparing,
   onMarkReady,
   onComplete,
@@ -436,6 +465,7 @@ function OrderCard({
   timeSince: (d: string) => string;
   onAccept: () => void;
   onReject: () => void;
+  onCancel: (reason: string) => void;
   onStartPreparing: () => void;
   onMarkReady: () => void;
   onComplete: (code: string) => void;
@@ -443,6 +473,8 @@ function OrderCard({
   onStartVerify: () => void;
   onCancelVerify: () => void;
 }) {
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
   const borderColor: Record<string, string> = {
     pending: "border-l-amber-500",
     confirmed: "border-l-blue-500",
@@ -562,23 +594,43 @@ function OrderCard({
         )}
 
         {order.status === "confirmed" && (
-          <button
-            type="button"
-            onClick={onStartPreparing}
-            className="w-full py-2.5 rounded-xl bg-orange-500 text-white font-semibold text-sm hover:bg-orange-600 transition-colors"
-          >
-            Start Preparing
-          </button>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={onStartPreparing}
+              className="w-full py-2.5 rounded-xl bg-orange-500 text-white font-semibold text-sm hover:bg-orange-600 transition-colors"
+            >
+              Start Preparing
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowCancelDialog(true)}
+              className="w-full py-2 rounded-xl border border-brand-red text-brand-red font-medium text-xs hover:bg-red-50 transition-colors flex items-center justify-center gap-1.5"
+            >
+              <XCircle className="w-3.5 h-3.5" />
+              Cancel Order
+            </button>
+          </div>
         )}
 
         {order.status === "preparing" && (
-          <button
-            type="button"
-            onClick={onMarkReady}
-            className="w-full py-2.5 rounded-xl bg-brand-green text-white font-semibold text-sm hover:bg-brand-green-dark transition-colors"
-          >
-            Ready for Pickup
-          </button>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={onMarkReady}
+              className="w-full py-2.5 rounded-xl bg-brand-green text-white font-semibold text-sm hover:bg-brand-green-dark transition-colors"
+            >
+              Ready for Pickup
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowCancelDialog(true)}
+              className="w-full py-2 rounded-xl border border-brand-red text-brand-red font-medium text-xs hover:bg-red-50 transition-colors flex items-center justify-center gap-1.5"
+            >
+              <XCircle className="w-3.5 h-3.5" />
+              Cancel Order
+            </button>
+          </div>
         )}
 
         {order.status === "ready" && !isVerifying && (
@@ -591,6 +643,50 @@ function OrderCard({
           </button>
         )}
       </div>
+
+      {/* Cancel Order Dialog */}
+      {showCancelDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-5 shadow-xl">
+            <h3 className="text-base font-bold text-brand-black mb-1">Cancel Order #{order.order_number}</h3>
+            <p className="text-xs text-brand-gray-500 mb-4">
+              Please provide a reason for cancelling this order. The customer will be refunded.
+            </p>
+            <textarea
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="e.g. Item out of stock, kitchen closed early..."
+              className="w-full px-3 py-2.5 border border-brand-gray-200 rounded-xl text-sm text-brand-gray-700 placeholder:text-brand-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-red/30 focus:border-brand-red resize-none"
+              rows={3}
+              autoFocus
+            />
+            <div className="flex gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCancelDialog(false);
+                  setCancelReason("");
+                }}
+                className="flex-1 py-2.5 rounded-xl border border-brand-gray-200 text-brand-gray-600 font-semibold text-sm hover:bg-brand-gray-50 transition-colors"
+              >
+                Go Back
+              </button>
+              <button
+                type="button"
+                disabled={!cancelReason.trim()}
+                onClick={() => {
+                  onCancel(cancelReason.trim());
+                  setShowCancelDialog(false);
+                  setCancelReason("");
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-brand-red text-white font-semibold text-sm hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Confirm Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

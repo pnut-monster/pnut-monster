@@ -147,6 +147,11 @@ export default function LoyaltyPage() {
   // Unclaimed wallet topups with amounts
   const [unclaimedTopupsList, setUnclaimedTopupsList] = useState<{ id: string; amount: number }[]>([]);
 
+  // Referee bonus state
+  const [isReferred, setIsReferred] = useState(false);
+  const [refereeBonusClaimed, setRefereeBonusClaimed] = useState(false);
+  const [claimingRefereBonus, setClaimingRefereeBonus] = useState(false);
+
   // Total lifetime order count for rewards section
   const [totalOrderCount, setTotalOrderCount] = useState(0);
 
@@ -370,6 +375,27 @@ export default function LoyaltyPage() {
         if (referralClaimableCount > 0) {
           claimable["referral"] = referralClaimableCount;
         }
+
+        // Check if this user was referred (referee claim state)
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("referred_by")
+          .eq("id", user.id)
+          .single();
+        if (profileData?.referred_by) {
+          setIsReferred(true);
+          const { data: refereeLogData } = await supabase
+            .from("loyalty_points_log")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("action_id", referralAction.id)
+            .eq("reference_id", "referral:" + user.id)
+            .limit(1);
+          setRefereeBonusClaimed(((refereeLogData ?? []) as { id: string }[]).length > 0);
+        } else {
+          setIsReferred(false);
+          setRefereeBonusClaimed(false);
+        }
       }
 
       // wallet_topup: check unclaimed topups
@@ -517,6 +543,33 @@ export default function LoyaltyPage() {
       toast.error("Something went wrong. Please try again.");
     } finally {
       setClaimingSlug(null);
+    }
+  };
+
+  const handleClaimRefereeBonus = async () => {
+    if (!userId) return;
+    setClaimingRefereeBonus(true);
+    try {
+      const { data: rpcData, error } = await supabase.rpc("claim_referee_reward");
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      const result = rpcData as { success: boolean; message?: string; points_awarded?: number } | null;
+      if (result && !result.success) {
+        toast.error(result.message || "Could not claim referral bonus");
+        return;
+      }
+      toast.success(
+        result?.points_awarded
+          ? `+${result.points_awarded} referral bonus claimed!`
+          : "Referral bonus claimed!"
+      );
+      await fetchData();
+    } catch {
+      toast.error("Something went wrong. Please try again.");
+    } finally {
+      setClaimingRefereeBonus(false);
     }
   };
 
@@ -673,6 +726,64 @@ export default function LoyaltyPage() {
         {/* ===== Earn Tab ===== */}
         {activeTab === "earn" && (
           <div className="space-y-3">
+            {/* Referee Bonus Card */}
+            {isReferred && !refereeBonusClaimed && (
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4 shadow-sm border border-green-200 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center shrink-0">
+                  <Star className="w-5 h-5 text-green-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-green-800">Referral Bonus</p>
+                  <p className="text-xs text-green-600 mt-0.5">
+                    You were referred! Claim your welcome bonus.
+                  </p>
+                </div>
+                <button
+                  onClick={handleClaimRefereeBonus}
+                  disabled={claimingRefereBonus}
+                  className="ml-1 px-3 py-1.5 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                >
+                  {claimingRefereBonus ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    "Claim"
+                  )}
+                </button>
+              </div>
+            )}
+            {isReferred && refereeBonusClaimed && (
+              <div className="bg-green-50 rounded-xl p-4 shadow-sm border border-green-200 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-green-800">Referral Bonus</p>
+                  <p className="text-xs text-green-600 mt-0.5">Welcome bonus claimed!</p>
+                </div>
+                <span className="ml-1 px-3 py-1.5 bg-green-100 text-green-700 text-xs font-bold rounded-lg flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Claimed
+                </span>
+              </div>
+            )}
+
+            {/* Refer a Friend Link */}
+            <button
+              onClick={() => router.push("/referral")}
+              className="w-full bg-white rounded-xl p-4 shadow-sm border border-brand-gray-100 flex items-center gap-3 hover:bg-brand-gray-50 transition-colors text-left"
+            >
+              <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center shrink-0">
+                <Star className="w-5 h-5 text-purple-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-brand-black">Refer a Friend</p>
+                <p className="text-xs text-brand-gray-500 mt-0.5">
+                  Share your code & earn referral points
+                </p>
+              </div>
+              <ChevronLeft className="w-4 h-4 text-brand-gray-400 rotate-180" />
+            </button>
+
             {actions.length === 0 ? (
               <EmptyState
                 icon={<Zap className="w-12 h-12" />}

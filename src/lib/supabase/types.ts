@@ -2767,6 +2767,7 @@ export type Database = {
       }
       orders: {
         Row: {
+          cancellation_reason: string | null
           coupon_code: string | null
           created_at: string
           delivery_code: string | null
@@ -2792,6 +2793,7 @@ export type Database = {
           wallet_used: number
         }
         Insert: {
+          cancellation_reason?: string | null
           coupon_code?: string | null
           created_at?: string
           delivery_code?: string | null
@@ -2817,6 +2819,7 @@ export type Database = {
           wallet_used?: number
         }
         Update: {
+          cancellation_reason?: string | null
           coupon_code?: string | null
           created_at?: string
           delivery_code?: string | null
@@ -3304,9 +3307,14 @@ export type Database = {
         }
         Returns: Json
       }
+      cancel_accepted_order: {
+        Args: { p_order_id: string; p_reason: string }
+        Returns: Json
+      }
       can_manage_order: { Args: { p_order_id: string }; Returns: boolean }
       check_membership_renewals: { Args: never; Returns: Json }
       check_nth_order_discount: { Args: { p_user_id: string }; Returns: Json }
+      claim_referee_reward: { Args: never; Returns: Json }
       claim_referral_reward: { Args: never; Returns: Json }
       complete_order_with_pickup_code: {
         Args: { p_code: string; p_order_id: string }
