@@ -47,13 +47,13 @@ type WindowForm = {
   counter_visual_style: string;
 };
 
-const STATUS_COLORS: Record<string, "success" | "warning" | "error" | "info" | "neutral"> = {
+const STATUS_COLORS: Record<string, "success" | "warning" | "danger" | "info" | "default"> = {
   scheduled: "info",
   open: "success",
   closed: "warning",
   processing: "warning",
   fulfilled: "success",
-  cancelled: "error",
+  cancelled: "danger",
 };
 
 function formatTime(iso: string) {
@@ -295,7 +295,7 @@ export default function AdminBatchWindowsPage() {
       )}
 
       {/* Create Window Modal */}
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Create Batch Window">
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Create Batch Window">
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Outlet</label>

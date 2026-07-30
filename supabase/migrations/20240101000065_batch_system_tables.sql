@@ -180,6 +180,7 @@ create table public.batch_orders (
   sub_location_id uuid references public.delivery_sub_locations(id),
   sub_location_text text,
   rep_id uuid references public.representatives(id),
+  sequence_number int,
   delivery_status text not null default 'pending' check (delivery_status in ('pending', 'out_for_delivery', 'delivered', 'undeliverable')),
   undeliverable_reason text,
   undeliverable_note text,

@@ -220,7 +220,7 @@ export default function AdminBatchRepsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-gray-900">{rep.name}</span>
-                    <Badge variant={rep.is_active ? "success" : "neutral"}>
+                    <Badge variant={rep.is_active ? "success" : "default"}>
                       {rep.is_active ? "Active" : "Inactive"}
                     </Badge>
                   </div>
@@ -254,7 +254,7 @@ export default function AdminBatchRepsPage() {
       )}
 
       {/* Create/Edit Rep Modal */}
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editingRep ? "Edit Representative" : "Add Representative"}>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingRep ? "Edit Representative" : "Add Representative"}>
         <div className="space-y-4">
           <Input label="Full Name" value={form.name}
             onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />

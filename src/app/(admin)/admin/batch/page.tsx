@@ -307,7 +307,7 @@ export default function AdminBatchPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-gray-900">{hub.name}</span>
-                      <Badge variant={hub.is_active ? "success" : "neutral"}>
+                      <Badge variant={hub.is_active ? "success" : "default"}>
                         {hub.is_active ? "Active" : "Inactive"}
                       </Badge>
                     </div>
@@ -379,7 +379,7 @@ export default function AdminBatchPage() {
                                 {blockExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                                 <MapPin size={14} className="text-gray-400" />
                                 <span className="flex-1 text-sm font-medium">{block.name}</span>
-                                <Badge variant={block.is_active ? "success" : "neutral"} className="text-[10px] px-1.5">
+                                <Badge variant={block.is_active ? "success" : "default"} className="text-[10px] px-1.5">
                                   {block.is_active ? "Active" : "Off"}
                                 </Badge>
                                 <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
@@ -412,7 +412,7 @@ export default function AdminBatchPage() {
                                         <div key={sub.id} className="flex items-center gap-2 text-xs py-0.5">
                                           <Layers size={12} className="text-gray-300" />
                                           <span className="flex-1">{sub.name}</span>
-                                          <Badge variant={sub.is_active ? "success" : "neutral"} className="text-[9px] px-1">
+                                          <Badge variant={sub.is_active ? "success" : "default"} className="text-[9px] px-1">
                                             {sub.is_active ? "On" : "Off"}
                                           </Badge>
                                           <button onClick={() => toggleSub(sub)} className="p-0.5 rounded hover:bg-gray-100 text-gray-400">
@@ -444,7 +444,7 @@ export default function AdminBatchPage() {
       )}
 
       {/* Hub Modal */}
-      <Modal isOpen={hubModalOpen} onClose={() => setHubModalOpen(false)} title={editingHub ? "Edit Hub" : "Create Hub"}>
+      <Modal open={hubModalOpen} onClose={() => setHubModalOpen(false)} title={editingHub ? "Edit Hub" : "Create Hub"}>
         <div className="space-y-4">
           <Input label="Hub Name" placeholder="e.g. Chandigarh University" value={hubForm.name}
             onChange={e => setHubForm(f => ({ ...f, name: e.target.value }))} />
@@ -457,7 +457,7 @@ export default function AdminBatchPage() {
       </Modal>
 
       {/* Block Modal */}
-      <Modal isOpen={blockModalOpen} onClose={() => setBlockModalOpen(false)} title={editingBlock ? "Edit Block" : "Add Block"}>
+      <Modal open={blockModalOpen} onClose={() => setBlockModalOpen(false)} title={editingBlock ? "Edit Block" : "Add Block"}>
         <div className="space-y-4">
           <Input label="Block Name" placeholder="e.g. Engineering Building" value={blockForm.name}
             onChange={e => setBlockForm(f => ({ ...f, name: e.target.value }))} />
@@ -468,7 +468,7 @@ export default function AdminBatchPage() {
       </Modal>
 
       {/* Sub-location Modal */}
-      <Modal isOpen={subModalOpen} onClose={() => setSubModalOpen(false)} title={editingSub ? "Edit Sub-location" : "Add Sub-location"}>
+      <Modal open={subModalOpen} onClose={() => setSubModalOpen(false)} title={editingSub ? "Edit Sub-location" : "Add Sub-location"}>
         <div className="space-y-4">
           <Input label="Sub-location Name" placeholder="e.g. Floor 2, Room 205" value={subForm.name}
             onChange={e => setSubForm(f => ({ ...f, name: e.target.value }))} />
@@ -479,7 +479,7 @@ export default function AdminBatchPage() {
       </Modal>
 
       {/* Link Outlet Modal */}
-      <Modal isOpen={linkModalOpen} onClose={() => setLinkModalOpen(false)} title="Link Outlet to Hub">
+      <Modal open={linkModalOpen} onClose={() => setLinkModalOpen(false)} title="Link Outlet to Hub">
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Outlet</label>
@@ -498,7 +498,7 @@ export default function AdminBatchPage() {
       </Modal>
 
       {/* Delete Confirm Modal */}
-      <Modal isOpen={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} title="Confirm Delete">
+      <Modal open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} title="Confirm Delete">
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
             Are you sure you want to delete <strong>{deleteConfirm?.name}</strong>?
