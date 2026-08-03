@@ -36,7 +36,7 @@
     "buffer": "^6.0.3",
     "framer-motion": "^12.35.0",
     "html5-qrcode": "^2.3.8",
-    "lucide-react": "^0.577.0",
+    "lucide-react": "^1.28.0",
     "next": "15",
     "qrcode": "^1.5.4",
     "react": "18",
