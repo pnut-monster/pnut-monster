@@ -24,6 +24,8 @@ import { useOutletStore } from "@/lib/stores/outlet-store";
 import { useCartStore } from "@/lib/stores/cart-store";
 import { formatCurrency } from "@/lib/utils/helpers";
 import { Skeleton } from "@/components/ui/skeleton";
+import { usePreLaunch } from "@/lib/hooks/use-pre-launch";
+import { PreLaunchPopup } from "@/components/customer/pre-launch-popup";
 
 import type {
   Profile,
@@ -58,6 +60,14 @@ function getCategoryEmoji(name: string): string {
 export default function CustomerHomePage() {
   const { selectedOutlet } = useOutletStore();
   const cartItemCount = useCartStore((s) => s.getItemCount());
+  const { isOrderingLocked, launchDate } = usePreLaunch();
+  const [showLaunchPopup, setShowLaunchPopup] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => { setHydrated(true); }, []);
+
+  useEffect(() => {
+    if (isOrderingLocked) setShowLaunchPopup(true);
+  }, [isOrderingLocked]);
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
@@ -571,7 +581,7 @@ export default function CustomerHomePage() {
       </div>
 
       {/* Floating Cart Button */}
-      {cartItemCount > 0 && (
+      {hydrated && cartItemCount > 0 && (
         <Link
           href="/cart"
           className="fixed bottom-24 right-4 z-50 flex items-center gap-2 bg-brand-yellow hover:bg-brand-yellow-dark text-brand-black font-bold px-5 py-3.5 rounded-2xl shadow-xl hover:shadow-2xl transition-all active:scale-95"
@@ -581,6 +591,12 @@ export default function CustomerHomePage() {
           <ArrowRight className="w-4 h-4" />
         </Link>
       )}
+
+      <PreLaunchPopup
+        open={showLaunchPopup}
+        onClose={() => setShowLaunchPopup(false)}
+        launchDate={launchDate}
+      />
     </div>
   );
 }

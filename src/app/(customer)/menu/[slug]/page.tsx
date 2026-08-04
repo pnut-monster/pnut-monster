@@ -24,6 +24,8 @@ import {
   ShoppingBag,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { usePreLaunch } from "@/lib/hooks/use-pre-launch";
+import { PreLaunchPopup } from "@/components/customer/pre-launch-popup";
 
 // Step type ordering
 const STEP_ORDER: CustomizationGroup["type"][] = [
@@ -61,6 +63,9 @@ export default function ItemDetailPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [selections, setSelections] = useState<Selections>({});
   const [quantity, setQuantity] = useState(1);
+
+  const { isOrderingLocked, launchDate } = usePreLaunch();
+  const [showPreLaunch, setShowPreLaunch] = useState(false);
 
   // Fetch item data
   useEffect(() => {
@@ -282,6 +287,11 @@ export default function ItemDetailPage() {
 
   const handleAddToCart = () => {
     if (!item) return;
+
+    if (isOrderingLocked) {
+      setShowPreLaunch(true);
+      return;
+    }
 
     const customizations: CartCustomization[] = [];
     for (const group of groups) {
@@ -628,6 +638,12 @@ export default function ItemDetailPage() {
           </div>
         </div>
       )}
+
+      <PreLaunchPopup
+        open={showPreLaunch}
+        onClose={() => setShowPreLaunch(false)}
+        launchDate={launchDate}
+      />
     </div>
   );
 }

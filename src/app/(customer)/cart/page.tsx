@@ -20,6 +20,8 @@ import { formatCurrency } from "@/lib/utils/helpers";
 import type { Coupon } from "@/lib/supabase/types";
 import type { UpsellCoupon } from "@/app/api/coupons/upsell/route";
 import toast from "react-hot-toast";
+import { usePreLaunch } from "@/lib/hooks/use-pre-launch";
+import { PreLaunchPopup } from "@/components/customer/pre-launch-popup";
 
 type ExtendedCoupon = Coupon & {
   name?: string | null;
@@ -64,6 +66,9 @@ export default function CartPage() {
   const [taxRate, setTaxRate] = useState(0.05);
   const [packagingCharge, setPackagingCharge] = useState(10);
   const [packagingMode, setPackagingMode] = useState<"per_order" | "per_item">("per_order");
+
+  const { isOrderingLocked, launchDate } = usePreLaunch();
+  const [showPreLaunch, setShowPreLaunch] = useState(false);
 
   const subtotal = getSubtotal();
   const discount = coupon_discount;
@@ -304,6 +309,10 @@ export default function CartPage() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   const handleProceedToCheckout = async () => {
+    if (isOrderingLocked) {
+      setShowPreLaunch(true);
+      return;
+    }
     setCheckoutLoading(true);
     try {
       const supabase = createClient();
@@ -683,6 +692,12 @@ export default function CartPage() {
           Proceed to Checkout &middot; {formatCurrency(total)}
         </Button>
       </div>
+
+      <PreLaunchPopup
+        open={showPreLaunch}
+        onClose={() => setShowPreLaunch(false)}
+        launchDate={launchDate}
+      />
     </div>
   );
 }

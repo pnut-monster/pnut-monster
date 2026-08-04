@@ -19,6 +19,8 @@ import type { Outlet, Wallet as WalletType } from "@/lib/supabase/types";
 import type { Json } from "@/lib/supabase/types";
 import toast from "react-hot-toast";
 import { BatchCheckoutSection } from "@/components/customer/batch/batch-checkout-section";
+import { usePreLaunch } from "@/lib/hooks/use-pre-launch";
+import { PreLaunchPopup } from "@/components/customer/pre-launch-popup";
 
 type PaymentMethod = "online" | "wallet" | "split";
 type RewardOption = "coupon" | "loyalty";
@@ -69,6 +71,9 @@ export default function CheckoutPage() {
   } = useCartStore();
 
   const { selectedOutlet, setOutlet: setSelectedOutlet } = useOutletStore();
+
+  const { isOrderingLocked, launchDate } = usePreLaunch();
+  const [showPreLaunch, setShowPreLaunch] = useState(false);
 
   const [walletData, setWalletData] = useState<WalletType | null>(null);
   const [walletLoading, setWalletLoading] = useState(true);
@@ -515,6 +520,11 @@ export default function CheckoutPage() {
   };
 
   const handlePlaceOrder = async () => {
+    if (isOrderingLocked) {
+      setShowPreLaunch(true);
+      return;
+    }
+
     if (!outlet_id) {
       toast.error("Please select an outlet first");
       return;
@@ -986,6 +996,12 @@ export default function CheckoutPage() {
               : "Place Order"}
         </Button>
       </div>
+
+      <PreLaunchPopup
+        open={showPreLaunch}
+        onClose={() => setShowPreLaunch(false)}
+        launchDate={launchDate}
+      />
     </div>
   );
 }

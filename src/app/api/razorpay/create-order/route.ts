@@ -102,6 +102,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Pre-launch ordering lock check
+    const launchCheck = createAdminClient();
+    const { data: launchSettings } = await launchCheck
+      .from("app_settings")
+      .select("key, value")
+      .in("key", ["pre_launch_enabled", "pre_launch_date"]);
+
+    if (launchSettings) {
+      const enabledRow = launchSettings.find((r: { key: string }) => r.key === "pre_launch_enabled");
+      const dateRow = launchSettings.find((r: { key: string }) => r.key === "pre_launch_date");
+      if (enabledRow?.value === "true") {
+        const launchDate = dateRow ? new Date(dateRow.value) : null;
+        if (!launchDate || new Date() < launchDate) {
+          return NextResponse.json(
+            { error: "Ordering is not available yet. Please check back on launch day!" },
+            { status: 403 }
+          );
+        }
+      }
+    }
+
     const rateLimit = await consumeRateLimit(
       "razorpay_create_order",
       `${user.id}:${requestIp(req)}`,

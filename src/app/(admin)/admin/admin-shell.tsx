@@ -30,6 +30,7 @@ import {
   VolumeX,
   Package,
   Boxes,
+  Rocket,
 } from "lucide-react";
 import { cn } from "@/lib/utils/helpers";
 import toast from "react-hot-toast";
@@ -49,6 +50,7 @@ const SIDEBAR_ITEMS = [
   { href: "/admin/loyalty", label: "Loyalty", icon: Star },
   { href: "/admin/customers", label: "Customers & Staff", icon: Users },
   { href: "/admin/reports", label: "Reports", icon: BarChart3 },
+  { href: "/admin/launch", label: "Launch", icon: Rocket },
   { href: "/admin/security", label: "Security", icon: ShieldCheck },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ] as const;

@@ -45,7 +45,7 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     const { key, value } = body as { key: string; value: string };
 
-    const ALLOWED_KEYS = ["require_2fa"];
+    const ALLOWED_KEYS = ["require_2fa", "pre_launch_enabled", "pre_launch_date"];
     if (!key || !ALLOWED_KEYS.includes(key)) {
       return NextResponse.json({ error: "Invalid setting key" }, { status: 400 });
     }
