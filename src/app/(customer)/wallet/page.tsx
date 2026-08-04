@@ -12,11 +12,14 @@ import {
   ChevronLeft,
   Gift,
   Plus,
+  Clock,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency, formatDateTime, cn } from "@/lib/utils/helpers";
 import { Spinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
+import { usePreLaunch } from "@/lib/hooks/use-pre-launch";
+import { PreLaunchPopup, useCountdown } from "@/components/customer/pre-launch-popup";
 import type {
   Wallet as WalletType,
   WalletTransaction,
@@ -72,10 +75,13 @@ function TransactionIcon({ type }: { type: WalletTransaction["type"] }) {
 export default function WalletPage() {
   const router = useRouter();
   const supabase = createClient();
+  const { isOrderingLocked, launchDate } = usePreLaunch();
+  const countdown = useCountdown(launchDate);
 
   const [loading, setLoading] = useState(true);
   const [wallet, setWallet] = useState<WalletSummary | null>(null);
   const [transactions, setTransactions] = useState<WalletTransactionSummary[]>([]);
+  const [showPreLaunchPopup, setShowPreLaunchPopup] = useState(false);
 
   // Top-up state
   const [showTopup, setShowTopup] = useState(false);
@@ -168,7 +174,19 @@ export default function WalletPage() {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    if (!loading && isOrderingLocked) {
+      setShowPreLaunchPopup(true);
+    }
+  }, [loading, isOrderingLocked]);
+
   const handleTopup = async () => {
+    if (isOrderingLocked) {
+      setShowPreLaunchPopup(true);
+      toast.error("Wallet top-up is not available before official launch!");
+      return;
+    }
+
     const amount = parseFloat(topupAmount);
     if (!amount || amount < 1) {
       toast.error("Enter a valid amount (minimum ₹1)");
@@ -321,6 +339,68 @@ export default function WalletPage() {
       </div>
 
       <div className="px-4 py-6 space-y-5 max-w-lg mx-auto">
+        {/* Pre-launch Notice & Live Countdown Banner */}
+        {isOrderingLocked && (
+          <div className="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-amber-500/10 border border-amber-300 rounded-2xl p-5 shadow-sm space-y-3.5">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 bg-amber-500/20 rounded-xl text-amber-800 shrink-0">
+                <Clock className="w-5 h-5 text-amber-700" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-amber-900 uppercase tracking-wider">
+                    Official Launch Countdown
+                  </p>
+                  <span className="text-[10px] font-bold bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full">
+                    Pre-Launch Mode
+                  </span>
+                </div>
+                <p className="text-xs text-amber-800 leading-relaxed mt-1">
+                  Adding money to wallet opens on launch day! Refer friends & accumulate loyalty points in the meantime.
+                </p>
+              </div>
+            </div>
+
+            {/* Embedded Live Timer */}
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl p-3 border border-amber-200 flex items-center justify-around text-center shadow-inner">
+              <div className="flex flex-col items-center">
+                <span className="font-[family-name:var(--font-heading)] text-brand-black text-lg font-bold">
+                  {String(countdown.days).padStart(2, "0")}
+                </span>
+                <span className="text-[9px] text-brand-gray-500 uppercase font-semibold">Days</span>
+              </div>
+              <span className="text-amber-400 font-bold text-sm">:</span>
+              <div className="flex flex-col items-center">
+                <span className="font-[family-name:var(--font-heading)] text-brand-black text-lg font-bold">
+                  {String(countdown.hours).padStart(2, "0")}
+                </span>
+                <span className="text-[9px] text-brand-gray-500 uppercase font-semibold">Hours</span>
+              </div>
+              <span className="text-amber-400 font-bold text-sm">:</span>
+              <div className="flex flex-col items-center">
+                <span className="font-[family-name:var(--font-heading)] text-brand-black text-lg font-bold">
+                  {String(countdown.minutes).padStart(2, "0")}
+                </span>
+                <span className="text-[9px] text-brand-gray-500 uppercase font-semibold">Mins</span>
+              </div>
+              <span className="text-amber-400 font-bold text-sm">:</span>
+              <div className="flex flex-col items-center">
+                <span className="font-[family-name:var(--font-heading)] text-brand-black text-lg font-bold">
+                  {String(countdown.seconds).padStart(2, "0")}
+                </span>
+                <span className="text-[9px] text-brand-gray-500 uppercase font-semibold">Secs</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowPreLaunchPopup(true)}
+              className="w-full text-center text-xs font-bold text-amber-900 hover:text-amber-950 underline transition-colors pt-0.5"
+            >
+              Get notified when we launch
+            </button>
+          </div>
+        )}
+
         {/* Balance Card */}
         <div className="bg-gradient-to-br from-brand-green via-brand-green to-brand-green-dark rounded-2xl p-6 shadow-xl relative overflow-hidden border border-brand-green-dark/20">
           <div className="absolute -right-8 -top-8 w-32 h-32 bg-white/10 rounded-full" />
@@ -357,11 +437,22 @@ export default function WalletPage() {
         {/* Add Money Button */}
         {!showTopup && (
           <button
-            onClick={() => setShowTopup(true)}
-            className="w-full flex items-center justify-center gap-2 bg-brand-green text-white font-bold py-3.5 rounded-xl text-sm hover:bg-brand-green-dark transition-all shadow-md"
+            onClick={() => {
+              if (isOrderingLocked) {
+                setShowPreLaunchPopup(true);
+                return;
+              }
+              setShowTopup(true);
+            }}
+            className={cn(
+              "w-full flex items-center justify-center gap-2 font-bold py-3.5 rounded-xl text-sm transition-all shadow-md",
+              isOrderingLocked
+                ? "bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200"
+                : "bg-brand-green text-white hover:bg-brand-green-dark"
+            )}
           >
-            <Plus className="w-4 h-4" />
-            Add Money to Wallet
+            {isOrderingLocked ? <Clock className="w-4 h-4 text-amber-800" /> : <Plus className="w-4 h-4" />}
+            {isOrderingLocked ? "Wallet Top-Up (Opens at Launch — View Timer)" : "Add Money to Wallet"}
           </button>
         )}
 
@@ -568,6 +659,12 @@ export default function WalletPage() {
           )}
         </div>
       </div>
+
+      <PreLaunchPopup
+        open={showPreLaunchPopup}
+        onClose={() => setShowPreLaunchPopup(false)}
+        launchDate={launchDate}
+      />
     </div>
   );
 }

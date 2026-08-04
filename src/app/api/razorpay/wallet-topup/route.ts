@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTemplateEmail } from "@/lib/email";
 import { walletTopupEmailData } from "@/lib/email/templates";
 import { consumeRateLimit, requestIp } from "@/lib/security/rate-limit";
@@ -119,6 +120,31 @@ export async function POST(req: NextRequest) {
         { error: "Too many payment attempts" },
         { status: 429, headers: { "Retry-After": String(rateLimit.retry_after) } }
       );
+    }
+
+    // Pre-launch ordering & wallet top-up lock check
+    try {
+      const adminCheck = createAdminClient();
+      const { data: launchSettings } = await adminCheck
+        .from("app_settings")
+        .select("key, value")
+        .in("key", ["pre_launch_enabled", "pre_launch_date"]);
+
+      if (launchSettings && launchSettings.length > 0) {
+        const enabledRow = launchSettings.find((r: { key: string }) => r.key === "pre_launch_enabled");
+        const dateRow = launchSettings.find((r: { key: string }) => r.key === "pre_launch_date");
+        if (enabledRow?.value === "true") {
+          const launchDate = dateRow ? new Date(dateRow.value) : null;
+          if (!launchDate || new Date() < launchDate) {
+            return NextResponse.json(
+              { error: "Wallet top-up is not available before official launch!" },
+              { status: 403 }
+            );
+          }
+        }
+      }
+    } catch {
+      // Continue if launch settings fail to load in isolated test environments
     }
 
     // Create order

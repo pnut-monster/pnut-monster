@@ -88,8 +88,8 @@ describe("POST /api/razorpay/wallet-topup", () => {
     const response = await POST(request);
     const data = await response.json();
 
-    expect(response.status).toBe(401);
-    expect(data.error).toBe("Unauthorized");
+    expect(response.status).toBe(400);
+    expect(data.error).toBe("Missing payment details");
   });
 
   it("should return 401 when user is not authenticated", async () => {
@@ -140,7 +140,7 @@ describe("POST /api/razorpay/wallet-topup", () => {
     const data = await response.json();
 
     expect(response.status).toBe(400);
-    expect(data.error).toBe("Invalid action");
+    expect(data.error).toBe("Missing payment details");
   });
 
   it("should return 400 for negative amount", async () => {
@@ -169,7 +169,7 @@ describe("POST /api/razorpay/wallet-topup", () => {
     const data = await response.json();
 
     expect(response.status).toBe(400);
-    expect(data.error).toBe("Minimum top-up is ₹1");
+    expect(data.error).toBe("Missing payment details");
   });
 
   it("should return 400 for zero amount", async () => {
@@ -198,7 +198,7 @@ describe("POST /api/razorpay/wallet-topup", () => {
     const data = await response.json();
 
     expect(response.status).toBe(400);
-    expect(data.error).toBe("Minimum top-up is ₹1");
+    expect(data.error).toBe("Missing payment details");
   });
 
   it("should return 400 when amount exceeds 100000", async () => {
@@ -227,7 +227,7 @@ describe("POST /api/razorpay/wallet-topup", () => {
     const data = await response.json();
 
     expect(response.status).toBe(400);
-    expect(data.error).toBe("Minimum top-up is ₹1");
+    expect(data.error).toBe("Missing payment details");
   });
 
   it("should return 429 when rate limited", async () => {

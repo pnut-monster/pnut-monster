@@ -10,7 +10,7 @@ interface PreLaunchPopupProps {
   launchDate: Date | null;
 }
 
-function useCountdown(target: Date | null) {
+export function useCountdown(target: Date | null) {
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
 
   useEffect(() => {

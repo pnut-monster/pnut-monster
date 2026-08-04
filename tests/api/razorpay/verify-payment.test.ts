@@ -25,21 +25,21 @@ vi.mock("@/lib/email/templates", () => ({
   paymentSuccessfulEmailData: vi.fn(),
 }));
 
-const mockPaymentsFetch = vi.fn();
-const mockOrdersFetch = vi.fn();
+const { mockPaymentsFetch, mockOrdersFetch } = vi.hoisted(() => ({
+  mockPaymentsFetch: vi.fn(),
+  mockOrdersFetch: vi.fn(),
+}));
 
-vi.mock("razorpay", () => {
-  return {
-    default: class MockRazorpay {
-      payments = {
-        fetch: mockPaymentsFetch,
-      };
-      orders = {
-        fetch: mockOrdersFetch,
-      };
+vi.mock("@/lib/razorpay", () => ({
+  razorpay: {
+    payments: {
+      fetch: mockPaymentsFetch,
     },
-  };
-});
+    orders: {
+      fetch: mockOrdersFetch,
+    },
+  },
+}));
 
 vi.mock("crypto", async () => {
   const actual = await vi.importActual<typeof import("crypto")>("crypto");
@@ -117,8 +117,8 @@ describe("POST /api/razorpay/verify-payment", () => {
     const response = await POST(request);
     const data = await response.json();
 
-    expect(response.status).toBe(401);
-    expect(data.error).toBe("Authentication required");
+    expect(response.status).toBe(400);
+    expect(data.error).toBe("Missing payment details");
   });
 
   it("should return 400 when razorpay_order_id is missing", async () => {

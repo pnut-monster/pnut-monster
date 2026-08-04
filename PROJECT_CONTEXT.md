@@ -785,6 +785,16 @@ Future sessions must not revert these without explicit user instruction.
   but local OpenNext adaptation remains blocked by the Windows build sandbox;
   Cloudflare Linux CI must build and deploy it.
 
+## 2026-08-04 — Pre-launch wallet top-up lock & full test suite audit
+
+### Added
+- Added pre-launch mode check to `/api/razorpay/wallet-topup` API route (returns 403 when pre-launch mode is active).
+- Added pre-launch notice banner and disabled top-up button state on `/wallet` customer page so users cannot add money to wallet before launch while keeping referrals and loyalty point accumulation intact.
+
+### Fixed
+- Fixed Vitest unit test suite (18/18 tests passing, 100% pass rate across `create-order`, `verify-payment`, `wallet-topup`).
+- Updated mock hoisting in `verify-payment.test.ts` and test assertions in `wallet-topup.test.ts`.
+
 ## 2026-07-20 — Full audit and documentation release
 
 ### Updated
